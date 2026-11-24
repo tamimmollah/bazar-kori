@@ -276,7 +276,6 @@ function shellHTML() {
       <button class="btn ghost hidden" id="logoutBtn" onclick="logout()">Logout</button>
     </div>
   </div>
-  <div class="gm-hdr-line">⚡ অর্ডার করুন, <span class="gm-hdr-yellow">২৫ মিনিটে</span> পেয়ে যান!</div>
   <div class="search-row">
     <div class="search-group">
       <select id="hdrCatSelect" onchange="goCat(this.value)" aria-label="ক্যাটাগরি বেছে নিন">${cats.map(c => `<option value="${esc(c)}">${c === "All" ? "All Categories" : esc(c)}</option>`).join("")}</select>
@@ -308,7 +307,7 @@ function footerHTML() {
     <div class="footer-col brand">
       <img class="footer-logo" src="logo.png" alt="বাজার করি">
       <b>বাজার করি</b>
-      <p>তাজা। সস্তা। ২৫ মিনিটে।<br>ডেমরার নিজের বাজার — তাজা বাজার, প্রতিদিন।</p>
+      <p>তাজা। সস্তা। ২৫ মিনিটে।</p>
     </div>
     <div class="footer-col">
       <b>Quick Links</b>
@@ -1473,7 +1472,13 @@ function addPopToCart() {
 // ---------- Cart & Checkout ----------
 const cart = () => ls("bazar_cart", []);
 const setCart = c => save("bazar_cart", c);
-function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: sellPrice(p), mrp: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); refreshProductGrids(); flyToCart(id, p.img); toast(p.name + " added."); }
+function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: sellPrice(p), mrp: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); refreshProductGrids(); flyToCart(id, p.img); bounceCartBtn(); toast(p.name + " added."); }
+// v42: header cart button pops (scale 1 → 1.25 → 1) when an item is added.
+function bounceCartBtn() {
+  const btn = document.querySelector(".hdr-actions .icon-btn");
+  if (!btn) return;
+  jsTween(btn, "bounce", 320, e => { btn.style.transform = `scale(${(1 + 0.25 * Math.sin(Math.PI * e)).toFixed(3)})`; }, () => { btn.style.transform = ""; });
+}
 function addCustomItem() { const inp = $("#customItem"); if (!inp) return; const v = inp.value.trim(); if (!v) return; const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, mrp: 0, qty: 1, img: "" }); setCart(c); inp.value = ""; renderCart(); toast("Custom item added — we will confirm its price."); }
 function changeQty(id, d) { const c = cart(); const f = c.find(x => String(x.id) === String(id)); if (!f) return; f.qty += d; if (f.qty <= 0) c.splice(c.indexOf(f), 1); setCart(c); renderCart(); refreshProductGrids(); }
 function toggleCart() { openCartPopup(); }
@@ -2848,6 +2853,54 @@ function jsTween(el, slot, dur, onUpdate, onDone) {
 // v40: display label for a role value — the raw role ("rider") is never
 // shown to the user; the header whoami line and the rider-page note use this.
 function roleLabel(r) { return r === "rider" ? "ডেলিভারি ম্যান" : r === "customer" ? "কাস্টমার" : r === "admin" ? "অ্যাডমিন" : r; }
+// ---------- v42: gentle float loop + flow badge pop ----------
+// One shared rAF loop drives all continuous bobbing (hero photo + store
+// logos) via the `translate` property, so it never fights the Ken Burns
+// `transform` scale on the same hero image. Slow + small on purpose.
+// The flow badges pop in sequence the first time the lime section scrolls
+// into view. Both are JS-driven, so they run with Animation effects OFF.
+let _floatLoopOn = false;
+function startFloatLoop() {
+  if (_floatLoopOn) return;
+  _floatLoopOn = true;
+  const floaters = [];
+  const heroImg = document.querySelector(".gm-hero-img img");
+  if (heroImg) floaters.push({ el: heroImg, amp: 7, period: 4200, phase: 0 });
+  document.querySelectorAll(".gm-store-logo").forEach((el, i) => {
+    floaters.push({ el, amp: 5, period: 3600, phase: i * 0.9 });
+  });
+  if (!floaters.length) return;
+  const t0 = performance.now();
+  const tick = now => {
+    const t = (now - t0) / 1000;
+    floaters.forEach(f => {
+      const y = f.amp * Math.sin((2 * Math.PI * t) / (f.period / 1000) + f.phase);
+      f.el.style.translate = `0 ${y.toFixed(1)}px`;
+    });
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+let _flowBadgesArmed = false;
+function armFlowBadges() {
+  if (_flowBadgesArmed) return;
+  const lime = document.querySelector(".gm-lime");
+  if (!lime || !("IntersectionObserver" in window)) return;
+  _flowBadgesArmed = true;
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      obs.disconnect();
+      lime.querySelectorAll(".gm-flow-card b").forEach((b, i) => {
+        setTimeout(() => {
+          b.style.transform = "scale(.5)";
+          jsTween(b, "pop", 380, e => { b.style.transform = `scale(${(0.5 + 0.5 * e).toFixed(3)})`; }, () => { b.style.transform = ""; });
+        }, i * 130);
+      });
+    });
+  }, { threshold: 0.25 });
+  obs.observe(lime);
+}
 // ---------- Hero typewriter (v40) ----------
 // Types the hero headline #heroTitle character by character (~45ms/char,
 // Bangla-safe: Array.from iterates code points, not UTF-16 units).
@@ -2879,12 +2932,15 @@ function animatePage() {
       jsTween(main, "page", 380, e => { main.style.opacity = String(e); }, () => { main.style.opacity = ""; });
     }
   }
-  // Hero: headline fade-in + slow Ken Burns on the hero photo (once per load).
+  // Hero: headline/sub fade-in + slow Ken Burns on the hero photo (once per load).
+  // v42: retargeted to the v40 Gromuse markup (.gm-hero-*); the old
+  // .hero-basket/.hero-left selectors no longer exist, so this was dead code.
   if (!_animHeroDone) {
-    const basket = document.querySelector(".hero-basket");
-    const head = document.querySelector(".hero-left h1");
-    const sub = document.querySelector(".hero-left p");
-    if (basket || head) {
+    const heroImg = document.querySelector(".gm-hero-img img");
+    const head = document.querySelector(".gm-hero-title");
+    const sub = document.querySelector(".gm-hero-sub");
+    const cta = document.querySelector(".gm-hero-btn");
+    if (heroImg || head) {
       _animHeroDone = true;
       if (head) {
         head.style.opacity = "0";
@@ -2894,10 +2950,17 @@ function animatePage() {
         sub.style.opacity = "0";
         jsTween(sub, "hero", 500, e => { sub.style.opacity = String(e); }, () => { sub.style.opacity = ""; });
       }
-      if (basket) jsTween(basket, "kenburns", 9000, e => { basket.style.transform = `scale(${(1 + 0.06 * e).toFixed(4)})`; });
+      if (cta) {
+        cta.style.opacity = "0";
+        jsTween(cta, "hero", 500, e => { cta.style.opacity = String(e); cta.style.transform = `scale(${(0.92 + 0.08 * e).toFixed(3)})`; }, () => { cta.style.opacity = ""; cta.style.transform = ""; });
+      }
+      if (heroImg) jsTween(heroImg, "kenburns", 9000, e => { heroImg.style.transform = `scale(${(1 + 0.07 * e).toFixed(4)})`; });
     }
   }
   // Scroll reveal: cards/tiles fade + slide in as they enter view.
+  // v42: covers the v40 Gromuse sections too (.gm-store, .gm-promo,
+  // .gm-flow-card, .section-head) and staggers siblings so a row
+  // cascades in (70ms per sibling) instead of popping all at once.
   if (!_revealObs && "IntersectionObserver" in window) {
     _revealObs = new IntersectionObserver(entries => {
       entries.forEach(en => {
@@ -2905,24 +2968,34 @@ function animatePage() {
         const el = en.target;
         _revealObs.unobserve(el);
         const from = 14;
-        el.style.opacity = "0";
-        el.style.transform = `translateY(${from}px)`;
-        el.style.animation = "none"; // kill the CSS fadeUp so JS owns the motion
-        jsTween(el, "reveal", 420, e => {
-          el.style.opacity = String(e);
-          el.style.transform = `translateY(${Math.round((1 - e) * from)}px)`;
-        }, () => { el.style.opacity = ""; el.style.transform = ""; el.dataset.animDone = "1"; });
+        const delay = parseInt(el.dataset.animDelay || "0", 10) || 0;
+        setTimeout(() => {
+          el.style.opacity = "0";
+          el.style.transform = `translateY(${from}px)`;
+          el.style.animation = "none"; // kill the CSS fadeUp so JS owns the motion
+          jsTween(el, "reveal", 420, e => {
+            el.style.opacity = String(e);
+            el.style.transform = `translateY(${Math.round((1 - e) * from)}px)`;
+          }, () => { el.style.opacity = ""; el.style.transform = ""; el.dataset.animDone = "1"; });
+        }, delay);
       });
     }, { threshold: 0.08, rootMargin: "0px 0px 40px 0px" });
   }
   if (_revealObs) {
-    document.querySelectorAll(".card, .cat-tile, .why-tile, .howto-step, .promo").forEach(el => {
-      if (!el.dataset.anim) { el.dataset.anim = "1"; _revealObs.observe(el); }
+    document.querySelectorAll(".card, .cat-tile, .why-tile, .howto-step, .promo, .gm-store, .gm-promo, .gm-flow-card, .section-head").forEach(el => {
+      if (!el.dataset.anim) {
+        el.dataset.anim = "1";
+        // stagger: index among same-parent siblings that also reveal
+        const sibs = el.parentElement ? [...el.parentElement.children].filter(c => c.matches(".card, .cat-tile, .why-tile, .howto-step, .promo, .gm-store, .gm-promo, .gm-flow-card, .section-head")) : [el];
+        el.dataset.animDelay = String(Math.max(0, sibs.indexOf(el)) * 70);
+        _revealObs.observe(el);
+      }
     });
   }
   // Hover lift + press states on buttons (JS tween; the CSS :hover still
   // applies instantly under reduced-motion, this adds the smooth part).
-  document.querySelectorAll(".btn, .add, .qty-btn, .status-btn, .chip").forEach(el => {
+  // v42: .gm-hero-btn included so the hero CTA lifts too.
+  document.querySelectorAll(".btn, .add, .qty-btn, .status-btn, .chip, .gm-hero-btn").forEach(el => {
     if (el.dataset.animHover) return;
     el.dataset.animHover = "1";
     el.addEventListener("mouseenter", () => {
@@ -2948,6 +3021,29 @@ function animatePage() {
       jsTween(el, "hover", 150, e => { el.style.translate = `0 ${(-3 * (1 - e)).toFixed(1)}px`; }, () => { el.style.translate = ""; if (el.dataset.animDone) el.style.transform = ""; });
     });
   });
+  // v42: product photo zoom on card hover + promo photo zoom on promo hover.
+  // The CSS transition on .card img is neutralised first, or it would lag
+  // every JS-set transform. transform-only, no layout work.
+  document.querySelectorAll(".card").forEach(el => {
+    if (el.dataset.animZoom) return;
+    el.dataset.animZoom = "1";
+    const img = el.querySelector("img");
+    if (!img) return;
+    img.style.transition = "none";
+    el.addEventListener("mouseenter", () => { jsTween(img, "zoom", 450, e => { img.style.transform = `scale(${(1 + 0.08 * e).toFixed(3)})`; }); });
+    el.addEventListener("mouseleave", () => { jsTween(img, "zoom", 450, e => { img.style.transform = `scale(${(1.08 - 0.08 * e).toFixed(3)})`; }, () => { img.style.transform = ""; }); });
+  });
+  document.querySelectorAll(".gm-promo").forEach(el => {
+    if (el.dataset.animZoom) return;
+    el.dataset.animZoom = "1";
+    const img = el.querySelector("img");
+    if (!img) return;
+    el.addEventListener("mouseenter", () => { jsTween(img, "zoom", 500, e => { img.style.transform = `scale(${(1 + 0.12 * e).toFixed(3)})`; }); });
+    el.addEventListener("mouseleave", () => { jsTween(img, "zoom", 500, e => { img.style.transform = `scale(${(1.12 - 0.12 * e).toFixed(3)})`; }, () => { img.style.transform = ""; }); });
+  });
+  // v42: gentle continuous float (one shared rAF loop) + flow badge pop.
+  startFloatLoop();
+  armFlowBadges();
 }
 function flyToCart(id, imgSrc) {
   // Small fly-to-cart cue: clone the product thumbnail and animate it
