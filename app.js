@@ -26,7 +26,7 @@ function initSupabase() {
   const cfg = window.BAZARKORI_SUPABASE || {};
   if (cfg.url && cfg.anonKey && !cfg.url.includes("YOUR-PROJECT") && window.supabase) {
     try { sb = window.supabase.createClient(cfg.url, cfg.anonKey); LIVE = true;
-      sb.channel("orders-live").on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => { loadOrders(); renderAll(); notify("New order update"); }).subscribe();
+      sb.channel("orders-live").on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => { loadOrders(); }).subscribe();
     } catch (e) { console.warn("Supabase init failed, demo mode", e); }
   }
   const b = $("#demoBanner"); if (b) b.style.display = LIVE ? "none" : "block";
@@ -49,18 +49,25 @@ function shellHTML() {
   <span>📞 <a href="tel:01865861015">01865-861015</a> • ⏰ খোলা: রাত ১২টা পর্যন্ত</span>
 </div>
 <header>
-  <a class="logo" href="index.html" style="text-decoration:none"><img class="logo-img" src="logo.png" alt="বাজার করি"><span class="logo-tag">তাজা। সস্তা। ২৫ মিনিটে।</span></a>
-  <div class="search-group">
-    <select id="hdrCatSelect" onchange="goCat(this.value)" aria-label="ক্যাটাগরি বেছে নিন">${cats.map(c => `<option value="${esc(c)}">${c === "All" ? "All Categories" : esc(c)}</option>`).join("")}</select>
-    <input class="search" id="hdrSearch" placeholder="তাজা ফল, সবজি, তেল, কোক… খুঁজুন" onkeydown="if(event.key==='Enter')goSearch()">
-    <button class="search-btn" onclick="goSearch()" aria-label="খুঁজুন">🔍</button>
+  <div class="hdr-row">
+    <a class="logo" href="index.html" style="text-decoration:none"><img class="logo-img" src="logo.png" alt="বাজার করি"><span class="logo-tag">তাজা। সস্তা। ২৫ মিনিটে।</span></a>
+    <div class="hdr-actions">
+      <button class="icon-btn" onclick="location.href='cart.html'" aria-label="কার্ট">🛒 <span class="hdr-count" id="cartCount">0</span></button>
+      <button class="icon-btn" onclick="location.href='orders.html'" aria-label="My Orders">📦 <span class="badge hidden" id="orderBadge">0</span></button>
+      <button class="btn ghost hdr-login" id="loginBtn" onclick="location.href='login.html'">Login / Register</button>
+      <button class="btn ghost hidden hdr-admin" id="adminBtn" onclick="location.href='admin.html'">Admin</button>
+      <button class="btn ghost hidden" id="logoutBtn" onclick="logout()">Logout</button>
+    </div>
   </div>
-  <button class="btn ghost" id="loginBtn" onclick="location.href='login.html'">Login / Register</button>
-  <button class="btn gold" onclick="location.href='cart.html'">🛒 Cart <span id="cartCount">0</span> • ৳<span id="cartTotal">0</span></button>
-  <button class="btn" onclick="location.href='orders.html'">My Orders <span class="badge hidden" id="orderBadge">0</span></button>
-  <button class="btn ghost hidden" id="adminBtn" onclick="location.href='admin.html'">Admin</button>
-  <span id="whoami" class="muted"></span>
-  <button class="btn ghost hidden" id="logoutBtn" onclick="logout()">Logout</button>
+  <div class="search-row">
+    <div class="search-group">
+      <select id="hdrCatSelect" onchange="goCat(this.value)" aria-label="ক্যাটাগরি বেছে নিন">${cats.map(c => `<option value="${esc(c)}">${c === "All" ? "All Categories" : esc(c)}</option>`).join("")}</select>
+      <input class="search" id="hdrSearch" placeholder="তেল, চাল, চিনি খুঁজুন…" onkeydown="if(event.key==='Enter')goSearch()">
+      <button class="search-btn" onclick="goSearch()" aria-label="খুঁজুন">🔍</button>
+    </div>
+    <span id="whoami" class="muted hdr-whoami"></span>
+    <span class="hdr-total muted">🛒 ৳<span id="cartTotal">0</span></span>
+  </div>
 </header>
 <nav class="mainnav">
   <a class="nav-link${active("index.html")}" href="index.html">🏠 Home</a>
@@ -655,6 +662,7 @@ function renderTrackPopup() {
   if (!trackCode) return;
   const o = orders().find(x => x.code === trackCode);
   if (!o) { $("#modalBody").innerHTML = "<p>অর্ডারটি পাওয়া যায়নি।</p>"; return; }
+  $("#modal").setAttribute("data-track-status", o.status);
   const t = timerDisplay(o);
   const idx = STEPS.findIndex(x => x[0] === o.status);
   const log = o.statusLog || {};
@@ -1097,12 +1105,14 @@ function renderCategoriesIfEmpty() {
     try { activeCat = qp("cat") || activeCat || "All"; renderCats(); renderProducts(); } catch (e) { console.warn("categories retry failed", e); }
   }
 }
+let _lastSyncSig = ""; // quiet-sync baseline, set in initApp (v17)
 function initApp() {
   try { seed(); } catch (e) { console.warn("seed failed", e); }
   try { mountShell(); } catch (e) { console.warn("mountShell failed", e); }
   try { initSupabase(); } catch (e) { console.warn("initSupabase failed", e); }
   try { initPageParams(); } catch (e) { console.warn("initPageParams failed", e); }
   try { renderAll(); } catch (e) { console.warn("renderAll failed", e); }
+  try { _lastSyncSig = ordersSig(); } catch (e) {} // quiet sync baseline (v17)
   // Belt-and-braces: if the grid is STILL empty shortly after load, render it.
   setTimeout(renderCategoriesIfEmpty, 300);
   setTimeout(renderCategoriesIfEmpty, 1000);
@@ -1123,7 +1133,88 @@ if (typeof document !== "undefined" && document.addEventListener) {
     try { if (PAGE === "categories.html") renderCategoriesIfEmpty(); else renderAll(); } catch (e) { console.warn("load re-render failed", e); }
   });
 }
-// Poll every 8s so an order placed in another tab/device appears (Supabase realtime does this live when configured).
-setInterval(() => { renderAll(); }, 8000);
-// 1-second tick: live countdown popup + rider/admin countdowns.
-setInterval(() => { if (trackCode && $("#modal").classList.contains("open")) renderTrackPopup(); updateCountdowns(); }, 1000);
+// ---------- Quiet background sync (v17) ----------
+// v16 and earlier re-rendered the ENTIRE page every 8 seconds
+// (setInterval(renderAll, 8000)) — product images reloaded, scroll jumped,
+// the search input lost focus: it felt like the site kept auto-refreshing.
+// Now: every 8s we only compare a lightweight signature of the data that
+// can change (orders + cart size + session). Only when something actually
+// changed — and only while the user is NOT busy — do we touch the page,
+// and then ONLY the orders-related parts (order badge, My Orders / admin
+// list, header cart numbers). The product grid, hero, header and search
+// are NEVER rebuilt by the sync.
+function ordersSig() {
+  try { return JSON.stringify({ o: orders(), c: cart().length, s: (session() || {}).phone || "" }); }
+  catch (e) { return ""; }
+}
+function userIsBusy() {
+  const a = document.activeElement;
+  if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable)) return true;
+  const m = document.getElementById("modal");
+  if (m && m.classList.contains("open")) return true;
+  return false;
+}
+function updateOrderBadge() {
+  const newCount = orders().filter(o => o.status === "placed").length;
+  const b = $("#orderBadge"); if (b) { b.textContent = newCount; b.classList.toggle("hidden", !newCount); }
+}
+function updateHeaderCart() {
+  const c = cart(); const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
+  const cc = $("#cartCount"); if (cc) cc.textContent = c.reduce((a, i) => a + i.qty, 0);
+  const ct = $("#cartTotal"); if (ct) ct.textContent = sub + (c.length ? DELIVERY_FEE : 0);
+}
+function quietSync(force) {
+  const sig = ordersSig();
+  if (!force && sig === _lastSyncSig) return; // nothing changed: touch nothing
+  if (!force && userIsBusy()) return; // busy now — do NOT consume the signature, retry next tick
+  _lastSyncSig = sig;
+  updateOrderBadge();
+  updateHeaderCart();
+  // Only the orders-related parts, and only on their own pages.
+  if (PAGE === "orders.html") renderMyOrders();
+  else if (PAGE === "admin.html") renderAdmin();
+}
+// Best-effort Supabase orders refresh (was called but never defined before
+// v17 — the realtime handler used to throw here). Merges Supabase rows into
+// the local order list, then lets the quiet sync decide what to update.
+function loadOrders() {
+  if (!LIVE || !sb) { quietSync(false); return; }
+  try {
+    sb.from("orders").select("*").order("created_at", { ascending: false }).limit(50)
+      .then(({ data, error }) => {
+        if (error || !Array.isArray(data) || !data.length) { quietSync(false); return; }
+        const local = orders();
+        data.forEach(r => {
+          const code = r.order_code;
+          const ex = local.find(o => o.code === code);
+          const mapped = { code, customer: r.customer_name, phone: r.customer_phone, area: r.area, address: r.delivery_address, items: r.items || [], subtotal: r.subtotal_bdt, fee: r.delivery_fee_bdt, total: r.total_bdt, status: r.status, statusLog: (ex && ex.statusLog) || { placed: r.created_at }, rider: (ex && ex.rider) || "", created: r.created_at, date: (r.created_at || "").slice(0, 10) };
+          if (ex) Object.assign(ex, mapped); else local.unshift(mapped);
+        });
+        setOrders(local);
+        quietSync(false);
+        notify("New order update");
+      }).catch(() => quietSync(false));
+  } catch (e) { quietSync(false); }
+}
+// Quiet poll every 8s: an order placed in another tab/device appears
+// (Supabase realtime does this live when configured).
+setInterval(() => { try { quietSync(false); } catch (e) {} }, 8000);
+// 1-second tick: update ONLY the countdown text nodes — never rebuild the
+// popup or the page. The popup is fully re-rendered only when the order's
+// STATUS itself changes (e.g. accepted → picked up).
+setInterval(() => {
+  try {
+    updateCountdowns(); // small .js-countdown spans only, textContent swap
+    if (!trackCode) return;
+    const m = $("#modal");
+    if (!m || !m.classList.contains("open")) return;
+    const o = orders().find(x => x.code === trackCode);
+    if (!o) return;
+    if (m.getAttribute("data-track-status") !== o.status) { renderTrackPopup(); return; }
+    const t = timerDisplay(o);
+    const timerEl = m.querySelector(".track-timer");
+    if (timerEl && timerEl.textContent !== t.big) { timerEl.textContent = t.big; timerEl.className = "track-timer " + t.cls; }
+    const subEl = m.querySelector(".track-sub");
+    if (subEl && subEl.textContent !== t.sub) subEl.textContent = t.sub;
+  } catch (e) {}
+}, 1000);
