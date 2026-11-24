@@ -6,10 +6,10 @@
 <title>লগইন / রেজিস্টার — বাজার করি</title>
 <meta name="description" content="বাজার করি-তে লগইন করুন বা নতুন কাস্টমার অ্যাকাউন্ট বানান। রেজিস্ট্রেশনে ইমেইল ভেরিফিকেশন লাগবে — কোড যাবে আপনার ইমেইলে।">
 <link rel="icon" href="logo.png">
-<link rel="stylesheet" href="styles.css?v=32">
+<link rel="stylesheet" href="styles.css?v=33">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=32"></script>
-<script src="products.js?v=32"></script>
+<script src="supabase-config.js?v=33"></script>
+<script src="products.js?v=33"></script>
 </head>
 <body>
 <div id="shellHeader"></div>
@@ -19,16 +19,18 @@
     <p>লগইন ফোন নম্বর আর পাসওয়ার্ড দিয়ে। নতুন অ্যাকাউন্টে ইমেইলও লাগবে — ইমেইলে যাওয়া ৬ সংখ্যার কোড দিয়ে অ্যাকাউন্ট ভেরিফাই করতে হবে।</p>
   </div>
   <div class="login-grid">
-    <div class="panel">
+    <div class="panel login-card">
       <img class="sheet-logo" src="logo.png" alt="বাজার করি">
       <h2>লগইন</h2>
       <p class="muted">ফোন নম্বর ও পাসওয়ার্ড দিয়ে লগইন করুন।</p>
       <label>ফোন নম্বর</label><input id="lpPhone" placeholder="01XXXXXXXXX">
       <label>পাসওয়ার্ড</label><input id="lpPass" type="password" placeholder="পাসওয়ার্ড">
-      <button class="btn gold" style="width:100%;margin-top:10px" onclick="loginFromPage()">লগইন</button>
-      <p class="muted">অ্যাকাউন্ট নেই? পাশে রেজিস্টার করুন।</p>
+      <button class="btn gold auth-primary" onclick="loginFromPage()">লগইন</button>
+      <div class="auth-divider"><span>অথবা</span></div>
+      <p class="auth-alt">অ্যাকাউন্ট নেই? পাশে রেজিস্টার করুন।</p>
+      <div class="rider-cta">🛵 রাইডার হতে চান? <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a></div>
     </div>
-    <div class="panel" id="regPanel">
+    <div class="panel login-card" id="regPanel">
       <h2>রেজিস্টার — কাস্টমার</h2>
       <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। রাইডার হতে চাইলে <a href="rider.html">রাইডার রেজিস্ট্রেশন</a> করুন।</p>
       <div id="regForm">
@@ -40,7 +42,8 @@
       <label>এলাকা</label><select id="rpArea"></select>
       <div id="rpTerms"></div>
       <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="rpAgree" style="width:auto;margin-top:4px"> <span>হ্যাঁ, আমি উপরের সব শর্তে রাজি</span></label>
-      <button class="btn gold" style="width:100%;margin-top:10px" onclick="registerFromPage()">রেজিস্টার করুন</button>
+      <button class="btn gold auth-primary" onclick="registerFromPage()">রেজিস্টার করুন</button>
+      <div class="rider-cta">🛵 রাইডার হতে চান? <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a></div>
       </div>
       <div id="regOtp" class="hidden"></div>
     </div>
@@ -48,6 +51,6 @@
   <div class="panel" id="loginInfo" style="max-width:900px;margin:16px auto 0"></div>
 </main>
 <div id="shellFooter"></div>
-<script src="app.js?v=32"></script>
+<script src="app.js?v=33"></script>
 </body>
 </html>

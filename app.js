@@ -434,21 +434,52 @@ function emailOrderNotify(o) {
   } catch (e) { /* never block the order if email fails */ }
 }
 
+// ---------- Password eye toggle (v33) ----------
+// Every password input on the site gets an eye button (👁) beside it that
+// toggles show/hide, so the user can see what they typed. Implemented as
+// a sweep: any input[type=password] not yet wrapped in .pw-wrap gets
+// wrapped + an eye button. Runs on every renderAll (the modal / rider
+// forms re-render innerHTML) and right after the auth sheets are built.
+function togglePw(id, btn) {
+  const el = document.getElementById(id); if (!el) return;
+  const show = el.type === "password";
+  el.type = show ? "text" : "password";
+  if (btn) { btn.textContent = show ? "🙈" : "👁"; btn.setAttribute("aria-label", show ? "পাসওয়ার্ড লুকান" : "পাসওয়ার্ড দেখান"); }
+  try { el.focus(); } catch {}
+}
+function attachPwEyes() {
+  document.querySelectorAll('input[type="password"]').forEach(el => {
+    if (!el.id || el.closest(".pw-wrap")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "pw-wrap";
+    el.parentNode.insertBefore(wrap, el);
+    wrap.appendChild(el);
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "pw-eye"; b.textContent = "👁";
+    b.setAttribute("aria-label", "পাসওয়ার্ড দেখান");
+    b.setAttribute("onclick", `togglePw('${el.id}', this)`);
+    wrap.appendChild(b);
+  });
+}
 // ---------- Auth (v10: ONE unified login, no role choice, no owner link) ----------
 // Just phone + password. The system decides by credentials:
 // owner/admin account → admin session; customer account → customer session;
-// rider account → "রাইডাররা অ্যাপ ব্যবহার করুন" (riders use the Android app;
-// there is NO rider panel on the website anymore).
+// rider account → rider session (v33: the rider dashboard lives on
+// rider.html — a rider login redirects there).
 function openAuth() {
   const b = $("#modalBody");
   b.classList.remove("wide"); // v20: login sheet is narrow even after a wide cart popup
-  b.innerHTML = `<img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>লগইন</h2>
+  b.innerHTML = `<div class="auth-sheet"><img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>লগইন</h2>
   <p class="muted">ফোন নম্বর ও পাসওয়ার্ড দিয়ে লগইন করুন। নতুন হলে নিচে রেজিস্টার করুন।</p>
   <label>ফোন নম্বর</label><input id="aPhone" placeholder="01XXXXXXXXX">
   <label>পাসওয়ার্ড</label><input id="aPass" type="password" placeholder="পাসওয়ার্ড">
-  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="doLogin()">লগইন</button><button class="btn ghost" onclick="closeModal()">বাতিল</button></div>
-  <p class="muted">অ্যাকাউন্ট নেই? <a href="#" onclick="openRegister();return false;">রেজিস্টার করুন</a></p>`;
+  <button class="btn gold auth-primary" onclick="doLogin()">লগইন</button>
+  <button class="btn ghost auth-secondary" onclick="closeModal()">বাতিল</button>
+  <div class="auth-divider"><span>অথবা</span></div>
+  <p class="auth-alt">অ্যাকাউন্ট নেই? <a href="#" onclick="openRegister();return false;">রেজিস্টার করুন</a></p>
+  <div class="rider-cta">🛵 রাইডার হতে চান? <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a></div></div>`;
   $("#modal").classList.add("open");
+  attachPwEyes();
 }
 // ---------- Customer terms (v23) ----------
 // Shown at customer registration (modal AND login page). The customer must
@@ -473,8 +504,8 @@ function openRegister() {
   // If a registration is waiting for its code, show the OTP step instead.
   if (getPendingReg()) { showOtpStep("modal"); return; }
   const b = $("#modalBody");
-  b.innerHTML = `<img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>রেজিস্টার — কাস্টমার</h2>
-  <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। রাইডার হতে চাইলে <a href="rider.html">রাইডার রেজিস্ট্রেশন</a> করুন।</p>
+  b.innerHTML = `<div class="auth-sheet"><img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>রেজিস্টার — কাস্টমার</h2>
+  <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। রাইডার হতে চাইলে নিচের লিংক দেখুন।</p>
   <label>নাম</label><input id="rName" placeholder="আপনার নাম">
   <label>ফোন নম্বর</label><input id="rPhone" placeholder="01XXXXXXXXX">
   <label>ইমেইল</label><input id="rEmail" type="email" placeholder="name@gmail.com">
@@ -483,8 +514,12 @@ function openRegister() {
   <label>এলাকা</label><select id="rArea">${window.BAZARKORI_AREAS.map(a => `<option>${a}</option>`).join("")}</select>
   ${CUSTOMER_TERMS_HTML}
   <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="rAgree" style="width:auto;margin-top:4px"> <span>হ্যাঁ, আমি উপরের সব শর্তে রাজি</span></label>
-  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="doRegister()">রেজিস্টার করুন</button><button class="btn ghost" onclick="openAuth()">লগইন করুন</button></div>`;
+  <button class="btn gold auth-primary" onclick="doRegister()">রেজিস্টার করুন</button>
+  <div class="auth-divider"><span>অথবা</span></div>
+  <p class="auth-alt">অ্যাকাউন্ট আছে? <a href="#" onclick="openAuth();return false;">লগইন করুন</a></p>
+  <div class="rider-cta">🛵 রাইডার হতে চান? <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a></div></div>`;
   $("#modal").classList.add("open");
+  attachPwEyes();
 }
 // ---------- Email OTP verification (v30) ----------
 // Registration is two steps: (1) the form collects name/phone/email/
@@ -561,11 +596,11 @@ function startOtpCooldown() {
 }
 function otpStepHTML(p) {
   const left = otpCooldownLeft();
-  return `<img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>📧 ইমেইল ভেরিফাই করুন</h2>
+  return `<div class="auth-sheet"><img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>📧 ইমেইল ভেরিফাই করুন</h2>
   <p class="muted">৬ সংখ্যার কোডটি <b>${esc(p.email)}</b> ঠিকানায় পাঠানো হয়েছে। ইনবক্স (আর স্প্যাম ফোল্ডারটাও) দেখে কোডটি এখানে বসান।</p>
   <label>ভেরিফিকেশন কোড</label><input id="otpCode" inputmode="numeric" maxlength="6" placeholder="৬ সংখ্যার কোড" style="letter-spacing:4px;font-size:18px">
-  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="verifyOtpCode()">ভেরিফাই করুন</button></div>
-  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="otpResend" onclick="resendOtp()" ${left > 0 ? "disabled" : ""}>${left > 0 ? `কোড আবার পাঠান (${left} সেকেন্ড)` : "কোড আবার পাঠান"}</button><button class="btn ghost" onclick="cancelOtp()">ইমেইল বদলান</button></div>`;
+  <button class="btn gold auth-primary" onclick="verifyOtpCode()">ভেরিফাই করুন</button>
+  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="otpResend" onclick="resendOtp()" ${left > 0 ? "disabled" : ""}>${left > 0 ? `কোড আবার পাঠান (${left} সেকেন্ড)` : "কোড আবার পাঠান"}</button><button class="btn ghost" onclick="cancelOtp()">ইমেইল বদলান</button></div></div>`;
 }
 function showOtpStep(where) {
   const p = getPendingReg(); if (!p) return;
@@ -636,15 +671,12 @@ function loginWith(phone, pass) {
   const u = users().find(x => x.phone === phone);
   if (!u || u.pass !== pass) return toast("ভুল ফোন নম্বর বা পাসওয়ার্ড।");
   if (u.role === "rider") {
-    // Riders use the separate Android app for the order panel — no rider
-    // panel on the website. Registration + NID verification live on
-    // rider.html (v32).
-    const b = $("#modalBody");
-    if (b) {
-      b.innerHTML = `<h2>রাইডাররা অ্যাপ ব্যবহার করুন</h2><p>রাইডার প্যানেল (অর্ডার নেওয়া) এখন শুধু Android অ্যাপে আছে। রেজিস্ট্রেশন আর NID ভেরিফিকেশনের জন্য <a href="rider.html">রাইডার রেজিস্ট্রেশন পেজ</a> দেখুন।</p><div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" onclick="closeModal()">ঠিক আছে</button></div>`;
-      $("#modal").classList.add("open");
-    }
-    toast("রাইডাররা অ্যাপ ব্যবহার করুন");
+    // v33: riders log in on the WEBSITE now — the rider dashboard
+    // (order pool, Accept, status flow) lives on rider.html. Log the
+    // rider in and take them there.
+    save("bazar_session", u); closeModal(); renderAll();
+    toast("Logged in as " + u.name);
+    if (PAGE !== "rider.html") location.href = "rider.html";
     return;
   }
   if (u.banned) return toast("Your account is OFF / banned. Contact the owner on WhatsApp after payment.");
@@ -737,7 +769,7 @@ function riderLoginFromPage() {
 }
 function riderRegisterView() {
   return `
-  <div class="panel" style="background:#fff7d6;border-color:#f5a623"><b>ℹ️ জেনে রাখুন:</b> এই পেজে রেজিস্ট্রেশন আর NID ভেরিফিকেশন করা যায়। অর্ডার পাওয়া / Accept / ডেলিভারি স্ট্যাটাস আপডেট এখন শুধু রাইডার অ্যাপে চলে — অ্যাপটি এখনো তৈরি হয়নি। এখানে রেজিস্ট্রেশন করে ভেরিফাই হয়ে থাকলে অ্যাপ এলেই অর্ডার পেতে শুরু করবেন।</div>
+  <div class="panel" style="background:#fff7d6;border-color:#f5a623"><b>ℹ️ জেনে রাখুন:</b> এই পেজে রেজিস্ট্রেশন আর NID ভেরিফিকেশন করা যায়। ভেরিফাই হয়ে গেলে এই পেজেই অর্ডার আসবে — অর্ডার দেখে Accept করুন, কাস্টমারকে কল করে কনফার্ম করুন, তারপর পণ্য কিনে ডেলিভারি দিন।</div>
   <div id="riderForm" style="margin-top:16px">
   <div class="login-grid">
     <div class="panel">
@@ -777,7 +809,7 @@ function riderVerifyView(s) {
     <h2>🛵 ${esc(me.name)}</h2>
     <p class="muted">${esc(me.phone)} • এলাকা: ${esc((me.areas || []).join(", ") || "—")}</p>
     ${statusLine}
-    ${me.verified ? `<p>আপনার অ্যাকাউন্ট ভেরিফাইড। অর্ডার পাওয়া / Accept / ডেলিভারি স্ট্যাটাস এখন শুধু রাইডার অ্যাপে চলে — অ্যাপটি এখনো তৈরি হয়নি। অ্যাপ এলেই অর্ডার পেতে শুরু করবেন।</p>` : `
+    ${me.verified ? `<p>আপনার অ্যাকাউন্ট ভেরিফাইড। এই পেজেই অর্ডার পাবেন — অনলাইন হয়ে এলাকা ঠিক করুন, অর্ডার Accept করুন।</p>` : `
     <h3>NID ভেরিফিকেশন</h3>
     <p class="muted">আপনার ছবি + NID-র সামনে ও পেছনের ছবি আপলোড করুন। প্রোফাইলের নাম NID-র নামের সাথে মিলতে হবে।</p>
     <label>আপনার ছবি</label><input type="file" accept="image/*" id="vPhoto">
@@ -793,8 +825,18 @@ function riderVerifyView(s) {
 function renderRiderPage() {
   const el = $("#riderMain"); if (!el) return;
   const s = session();
-  // Step 3: a logged-in rider sees their verification status / upload.
-  if (s && s.role === "rider") { el.innerHTML = riderVerifyView(s); refreshRiderStatus(); return; }
+  // v33: a logged-in rider sees the ORDER DASHBOARD once verified
+  // (pool, Accept, status flow, earnings). Unverified/pending riders
+  // see the verification status + NID form; banned riders see OFF.
+  if (s && s.role === "rider") {
+    const me = users().find(u => u.phone === s.phone) || s;
+    if (me.banned) {
+      el.innerHTML = `<div class="panel" style="max-width:720px;margin:0 auto"><h2>🛵 ${esc(me.name)}</h2><p><b>Your account is OFF.</b> Pay your daily due on WhatsApp to the owner, then the admin will re-activate you.</p><p><button class="btn ghost" onclick="logout()">Logout</button></p></div>`;
+      return;
+    }
+    if (me.verified) { renderRider(); return; }
+    el.innerHTML = riderVerifyView(s); refreshRiderStatus(); return;
+  }
   // Steps 1+2: disclaimer + form (+ returning-rider login).
   const note = (s && s.role !== "rider") ? `<div class="panel" style="background:#fff7d6;border-color:#f5a623">আপনি <b>${esc(s.name)}</b> (${esc(s.role)}) হিসেবে লগইন করা আছেন — রাইডার রেজিস্ট্রেশন করতে আগে Logout করুন। <button class="btn small ghost" onclick="logout()">Logout</button></div>` : "";
   el.innerHTML = note + riderRegisterView();
@@ -1118,6 +1160,7 @@ function renderCatTiles() {
       <img src="${first.img}" alt="${esc(c)}" loading="lazy" onerror="this.style.display='none'">
       <b>${esc(c)}</b><span>${ps.length} টি পণ্য</span></div>`;
   }).join("");
+  animatePage(); // v33: observe the fresh tiles for the scroll reveal
 }
 function setCat(c) { activeCat = c; renderProducts(); }
 function is18(p) { return ["Tong & Smokestore", "Smokeless & Vape", "Sexual Wellness"].includes(p.category); }
@@ -1149,6 +1192,10 @@ function renderProducts() {
     <div class="pad"><h3>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h3>
     <div class="unit">${esc(p.unit)} • ${esc(p.category)}</div>
     <div class="row"><span class="price">${fmt(sellPrice(p))}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`).join("") || "<p>No products found.</p>";
+  // v33: the DOMContentLoaded re-render (v15.1) rebuilds this grid AFTER
+  // renderAll — so the reveal observer must be (re)attached here, on the
+  // fresh nodes, not only at the end of renderAll.
+  animatePage();
 }
 // ---------- Sales-driven Popular (v29) ----------
 // Tamim (24 Nov ~13:00): "আজকের জনপ্রিয় পণ্য" shows ONLY products that
@@ -1193,6 +1240,7 @@ function renderDeals() {
     <div class="row"><span class="price">${fmt(sellPrice(p))}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div>
     <div class="muted">🔥 ${bn(sold)} বার বিক্রি হয়েছে</div></div></div>`).join("")
     : (PAGE === "deals.html" ? "<p>এখনো কোনো পণ্য ১৫টির বেশি বিক্রি হয়নি — বিক্রি বাড়লেই জনপ্রিয় পণ্যগুলো এখানে আসবে।</p>" : "");
+  animatePage(); // v33: observe the fresh cards for the scroll reveal
 }
 function renderFeatured() {
   // v13 featured strip is now the "আজকের জনপ্রিয় পণ্য" section; kept as an
@@ -1252,7 +1300,7 @@ function addPopToCart() {
 // ---------- Cart & Checkout ----------
 const cart = () => ls("bazar_cart", []);
 const setCart = c => save("bazar_cart", c);
-function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: sellPrice(p), mrp: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); toast(p.name + " added."); }
+function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: sellPrice(p), mrp: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); flyToCart(id, p.img); toast(p.name + " added."); }
 function addCustomItem() { const inp = $("#customItem"); if (!inp) return; const v = inp.value.trim(); if (!v) return; const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, mrp: 0, qty: 1, img: "" }); setCart(c); inp.value = ""; renderCart(); toast("Custom item added — we will confirm its price."); }
 function changeQty(id, d) { const c = cart(); const f = c.find(x => String(x.id) === String(id)); if (!f) return; f.qty += d; if (f.qty <= 0) c.splice(c.indexOf(f), 1); setCart(c); renderCart(); }
 function toggleCart() { openCartPopup(); }
@@ -1298,7 +1346,7 @@ function createOrder(name, phone, addr, area) {
   const all = orders(); all.unshift(o); setOrders(all); setCart([]);
   notify("Order " + o.code + " placed! Broadcasting to online riders…");
   emailOrderNotify(o); // fire-and-forget; admin badge/sound above still fires regardless
-  if (LIVE && sb) sb.from("orders").insert([{ order_code: o.code, customer_name: name, customer_phone: phone, delivery_address: addr, area, items: c, subtotal_bdt: sub, delivery_fee_bdt: fb.fee, total_bdt: o.total, status: "placed" }]).then(() => {});
+  insertOrderToSupabase(o); // v33: full row (falls back to the v1–v32 column set pre-migration)
   return o;
 }
 function placeOrder() {
@@ -1395,8 +1443,153 @@ function recordStatus(o, st) { o.statusLog = Object.assign({}, o.statusLog, { [s
 function syncOrderStatus(o) {
   // Best-effort Supabase update, same pattern as the existing order insert:
   // a missing/failed update never blocks the local status change.
+  syncOrderFull(o);
+}
+// ---------- Cross-device order sync (v33) ----------
+// AUDIT: localStorage alone CANNOT show an order placed on a customer's
+// phone to a rider on another phone. The Supabase `orders` table is the
+// shared store — but it only has columns for status + rider_name +
+// delivered_at. The v33 migration (supabase-v33-orders-migration.sql)
+// adds status_log, call_confirmed_at, cancel_history, declined_by,
+// cancelled_by/reason/note/at, service_fee_bdt, mrp_subtotal_bdt,
+// weight_kg. Until that SQL runs, syncOrderFull sends the FULL payload
+// once; a "column does not exist" error (PGRST204) flips _sbFullCols
+// off and every later sync falls back to the minimal payload (status +
+// rider_name + delivered_at) — the order flow still works cross-device,
+// only the rich state (call-confirm time, step timestamps, cancel
+// history) stays local-only until the migration runs.
+let _sbFullCols = true;
+function isMissingColumnError(err) {
+  if (!err) return false;
+  const m = ((err.message || "") + " " + (err.code || "")).toLowerCase();
+  return m.includes("pgrst204") || (m.includes("column") && m.includes("does not exist"));
+}
+function orderUpdatePatch(o) {
+  if (!_sbFullCols) return { status: o.status, rider_name: o.rider || null, delivered_at: (o.statusLog && o.statusLog.delivered) || null };
+  return {
+    status: o.status, rider_name: o.rider || null,
+    status_log: o.statusLog || {},
+    call_confirmed_at: o.callConfirmedAt || null,
+    cancel_history: o.cancelHistory || [],
+    declined_by: o.declinedBy || [],
+    cancelled_by: o.cancelledBy || null,
+    cancel_reason: o.cancelReason || null,
+    cancel_note: o.cancelNote || null,
+    cancelled_at: o.cancelledAt || null,
+    service_fee_bdt: o.serviceFee || 0,
+    mrp_subtotal_bdt: o.mrpSubtotal || 0,
+    weight_kg: o.weightKg || 0,
+    delivered_at: (o.statusLog && o.statusLog.delivered) || null
+  };
+}
+function syncOrderFull(o) {
+  // Full-field best-effort update. Marks the local row dirty
+  // (_syncPending = timestamp) so loadOrders() never clobbers a just-made
+  // local change with stale remote data; the mark expires after 15s.
   if (!LIVE || !sb) return;
-  try { sb.from("orders").update({ status: o.status }).eq("order_code", o.code).then(() => {}).catch(() => {}); } catch (e) {}
+  try {
+    // Persist the dirty mark on the SAVED row (re-read + save — the
+    // caller's in-memory object is not the saved copy).
+    try {
+      const all = orders(); const ex = all.find(x => x.code === o.code);
+      if (ex) { ex._syncPending = Date.now(); setOrders(all); }
+    } catch {}
+    const clearPending = () => {
+      try {
+        const all = orders(); const ex = all.find(x => x.code === o.code);
+        if (ex) { delete ex._syncPending; setOrders(all); }
+      } catch {}
+    };
+    sb.from("orders").update(orderUpdatePatch(o)).eq("order_code", o.code)
+      .then(({ error }) => {
+        if (error && isMissingColumnError(error) && _sbFullCols) {
+          _sbFullCols = false;
+          // Retry once with the minimal payload (columns that exist today).
+          sb.from("orders").update(orderUpdatePatch(o)).eq("order_code", o.code).then(() => clearPending()).catch(() => clearPending());
+        } else clearPending();
+      }).catch(() => clearPending());
+  } catch (e) {}
+}
+function insertOrderToSupabase(o) {
+  // createOrder's insert, with the same graceful fallback: full row first,
+  // minimal row (the v1–v32 column set) if the migration hasn't run yet.
+  if (!LIVE || !sb) return;
+  const full = {
+    order_code: o.code, customer_name: o.customer, customer_phone: o.phone,
+    delivery_address: o.address, area: o.area, items: o.items || [],
+    subtotal_bdt: o.subtotal, delivery_fee_bdt: o.fee, total_bdt: o.total,
+    status: o.status, rider_name: o.rider || null,
+    status_log: o.statusLog || { placed: o.created },
+    call_confirmed_at: o.callConfirmedAt || null,
+    cancel_history: o.cancelHistory || [], declined_by: o.declinedBy || [],
+    cancelled_by: o.cancelledBy || null, cancel_reason: o.cancelReason || null,
+    cancel_note: o.cancelNote || null, cancelled_at: o.cancelledAt || null,
+    service_fee_bdt: o.serviceFee || 0, mrp_subtotal_bdt: o.mrpSubtotal || 0,
+    weight_kg: o.weightKg || 0
+  };
+  const minimal = {
+    order_code: o.code, customer_name: o.customer, customer_phone: o.phone,
+    delivery_address: o.address, area: o.area, items: o.items || [],
+    subtotal_bdt: o.subtotal, delivery_fee_bdt: o.fee, total_bdt: o.total, status: "placed"
+  };
+  try {
+    sb.from("orders").insert([full]).then(({ error }) => {
+      if (error && isMissingColumnError(error) && _sbFullCols) {
+        _sbFullCols = false;
+        sb.from("orders").insert([minimal]).then(() => {}).catch(() => {});
+      }
+    }).catch(() => {});
+  } catch (e) {}
+}
+async function claimOrderSb(o, meName) {
+  // First Accept wins, enforced SERVER-side: the conditional update only
+  // touches the row while it is still "placed". If another rider already
+  // accepted, the update matches 0 rows → false (too late). Returns true
+  // when the claim succeeded OR when Supabase is unreachable / errors
+  // (local-only mode keeps the old behaviour — the local status check in
+  // acceptOrder is the fallback guard).
+  if (!LIVE || !sb) return true;
+  const now = new Date().toISOString();
+  const log = Object.assign({}, o.statusLog, { accepted: now });
+  try {
+    const patch = _sbFullCols
+      ? { status: "accepted", rider_name: meName, status_log: log }
+      : { status: "accepted", rider_name: meName };
+    const { data, error } = await sb.from("orders").update(patch).eq("order_code", o.code).eq("status", "placed").select("order_code");
+    if (error) {
+      if (isMissingColumnError(error) && _sbFullCols) { _sbFullCols = false; return claimOrderSb(o, meName); }
+      return true;
+    }
+    return Array.isArray(data) && data.length > 0;
+  } catch (e) { return true; }
+}
+function sbRowToOrder(r, ex) {
+  // One Supabase orders row → one local order, merged with the local copy
+  // (ex) so nothing the local browser knows is lost when the remote row
+  // lacks the v33 columns (pre-migration) or a field.
+  const remoteLog = (r.status_log && typeof r.status_log === "object") ? r.status_log : {};
+  const log = Object.assign({}, ex && ex.statusLog, remoteLog);
+  if (!log.placed && r.created_at) log.placed = r.created_at;
+  if (r.delivered_at) log.delivered = r.delivered_at;
+  const union = (a, b) => Array.from(new Set([...(a || []), ...(b || [])]));
+  return {
+    code: r.order_code, customer: r.customer_name, phone: r.customer_phone,
+    area: r.area, address: r.delivery_address, items: r.items || (ex && ex.items) || [],
+    subtotal: r.subtotal_bdt, mrpSubtotal: (r.mrp_subtotal_bdt != null ? r.mrp_subtotal_bdt : (ex && ex.mrpSubtotal)),
+    serviceFee: (r.service_fee_bdt != null ? r.service_fee_bdt : (ex && ex.serviceFee)),
+    fee: r.delivery_fee_bdt, total: r.total_bdt,
+    weightKg: (r.weight_kg != null ? r.weight_kg : (ex && ex.weightKg)),
+    status: r.status, statusLog: log,
+    rider: r.rider_name || (ex && ex.rider) || "",
+    callConfirmedAt: r.call_confirmed_at || (ex && ex.callConfirmedAt) || null,
+    cancelHistory: (Array.isArray(r.cancel_history) && r.cancel_history.length) ? r.cancel_history : ((ex && ex.cancelHistory) || []),
+    declinedBy: union(ex && ex.declinedBy, r.declined_by),
+    cancelledBy: r.cancelled_by || (ex && ex.cancelledBy) || "",
+    cancelReason: r.cancel_reason || (ex && ex.cancelReason) || "",
+    cancelNote: r.cancel_note || (ex && ex.cancelNote) || "",
+    cancelledAt: r.cancelled_at || (ex && ex.cancelledAt) || null,
+    created: r.created_at, date: (r.created_at || "").slice(0, 10)
+  };
 }
 
 // ---------- Live countdown tracking (v9) ----------
@@ -1535,8 +1728,16 @@ function saveRiderAreas() {
 }
 function syncAreasToSupabase(u) {
   // Best-effort only (localStorage is the working store in this build).
+  // NOTE: profiles has no `areas` column — areas ride as comma-joined
+  // text in `area` (same as insertProfileToSupabase); the old code sent
+  // { areas: [...] } which PostgREST rejects as an unknown column.
   if (!LIVE || !sb) return;
-  try { sb.from("profiles").update({ areas: u.areas }).eq("phone", u.phone).then(() => {}).catch(() => {}); } catch (e) {}
+  try { sb.from("profiles").update({ area: (u.areas || []).join(", ") || null }).eq("phone", u.phone).then(() => {}).catch(() => {}); } catch (e) {}
+}
+function syncOnlineToSupabase(u) {
+  // Best-effort: keep the admin's Riders table honest about who is online.
+  if (!LIVE || !sb) return;
+  try { sb.from("profiles").update({ is_online: !!u.online }).eq("phone", u.phone).then(() => {}).catch(() => {}); } catch (e) {}
 }
 
 // ---------- Customer tracking ----------
@@ -1567,14 +1768,47 @@ function renderMyOrders() {
 
 // ---------- Rider ----------
 function fileToData(input, cb) { const f = input.files && input.files[0]; if (!f) return cb(""); const r = new FileReader(); r.onload = () => cb(r.result); r.readAsDataURL(f); }
+// v33: money breakdown shown to the rider BEFORE Accept (spec §1): the
+// rider buys with his own money, so he sees the full product cost first.
+function orderMoney(o) {
+  const qty = (o.items || []).reduce((s, i) => s + (i.qty || 0), 0);
+  const mrp = o.mrpSubtotal != null ? o.mrpSubtotal : (o.subtotal - 5 * qty);
+  const svc = o.serviceFee != null ? o.serviceFee : 5 * qty;
+  const w = o.weightKg || 0;
+  return { qty, mrp, svc, w, fee: o.fee || 0, subtotal: o.subtotal || 0, total: o.total || 0 };
+}
+function orderMoneyHTML(o) {
+  const m = orderMoney(o);
+  return `<div class="r-money">
+    <div class="r-money-row"><span>পণ্যের দাম (MRP)</span><b>${fmt(m.mrp)}</b></div>
+    <div class="r-money-row"><span>প্রোডাক্ট সার্ভিস চার্জ (৳৫ × ${m.qty})</span><b>${fmt(m.svc)}</b></div>
+    <div class="r-money-row"><span>পণ্যের মোট (MRP+৳৫)</span><b>${fmt(m.subtotal)}</b></div>
+    <div class="r-money-row"><span>ওজন</span><b>${m.w} kg</b></div>
+    <div class="r-money-row"><span>ডেলিভারি চার্জ (আপনার)</span><b>${fmt(m.fee)}</b></div>
+    <div class="r-money-row r-total"><span>কাস্টমার মোট দেবে</span><b>${fmt(m.total)}</b></div>
+    <div class="r-money-note">আপনি দোকানে ${fmt(m.mrp)} দিয়ে কিনবেন • ডেলিভারি চার্জ ${fmt(m.fee)} আপনার • মালিককে দিতে হবে ${fmt(m.svc)} + ডেলিভারি চার্জের ১০% ${fmt(Math.round(m.fee * 0.1))}</div>
+  </div>`;
+}
+function riderOrderPreviewHTML(o) {
+  return `<div class="r-order panel" data-code="${o.code}">
+    <div class="r-order-head"><b>${o.code}</b><span class="r-order-area">${esc(o.area)}</span><span class="muted">${fmtTime(o.created)}</span></div>
+    <div class="r-order-addr">📍 ${esc(o.address)}</div>
+    <div class="r-order-items">${o.items.map(i => `<div class="r-item"><span>${esc(i.name)}</span><span>× ${i.qty}</span><b>${fmt(i.price * i.qty)}</b></div>`).join("")}</div>
+    ${orderMoneyHTML(o)}
+    <button class="btn gold r-accept" onclick="acceptOrder('${o.code}')">✅ Accept — আমি ডেলিভারি করব</button>
+  </div>`;
+}
+// Codes the rider has already been alerted about in this page session
+// (new-order banner + beep fire once per code).
+const _riderSeenPool = new Set();
 function renderRider() {
-  // v10: the rider panel is REMOVED from the website (riders use the Android
-  // app). The rider accept/status functions below stay in the code because the
-  // app shares this logic — but there is no rider UI on the website anymore.
-  const el = $("#riderPanel");
+  // v33: the rider dashboard lives on the WEBSITE now (rider.html —
+  // #riderMain; #riderPanel is kept as a fallback target). The v10 note
+  // about "app only" is gone.
+  const el = $("#riderPanel") || $("#riderMain");
   if (!el) return;
   const s = session();
-  if (!s || s.role !== "rider") { el.innerHTML = `<p>রাইডাররা অ্যাপ ব্যবহার করুন — রাইডার প্যানেল এখন শুধু Android অ্যাপে আছে।</p>`; return; }
+  if (!s || s.role !== "rider") { el.innerHTML = `<p>রাইডার হোন — লগইন করুন অথবা <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a>।</p>`; return; }
   const me = users().find(u => u.phone === s.phone) || s;
   // v25: re-broadcast pool skips orders THIS rider cancelled (declinedBy).
   const pool = orders().filter(o => o.status === "placed" && (me.areas || []).includes(o.area) && !(o.declinedBy || []).includes(me.name));
@@ -1583,6 +1817,14 @@ function renderRider() {
   const earnings = ordersFeeSum(doneToday), rd = riderDue(doneToday), due = rd.total; // v24: ৳5/unit service + 10% of delivery fees
   const pay = ls("bazar_payouts", []).find(p => p.rider === me.name && p.date === todayStr()) || { sent: 0, trxid: "" };
   const ver = ls("bazar_verifications", []).find(v => v.phone === me.phone);
+  // v33: new-order alert — any placed order in my areas I have not been
+  // alerted about yet in this page session → banner + one beep. The
+  // banner stays while fresh (placed < 5 min ago) orders wait in the pool.
+  const unseenPool = pool.filter(o => !_riderSeenPool.has(o.code));
+  if (unseenPool.length && me.verified && !me.banned && me.online) { unseenPool.forEach(o => _riderSeenPool.add(o.code)); beep(); }
+  const freshPool = pool.filter(o => (Date.now() - new Date(o.created).getTime()) < 5 * 60 * 1000);
+  const newAlert = (me.verified && !me.banned && me.online && freshPool.length)
+    ? `<div class="r-new-alert">🔔 নতুন অর্ডার এসেছে! ${freshPool.map(o => o.code).join(", ")} — নিচে দেখুন, প্রথমে Accept করলেই অর্ডারটি আপনার।</div>` : "";
   el.innerHTML = `
   <p><b>${esc(me.name)}</b> • ${esc(me.phone)} • ${esc(me.area)} •
   <span class="pill ${me.banned ? "bad" : me.verified ? "ok" : "warn"}">${me.banned ? "OFF / Banned" : me.verified ? "Verified Rider" : "Not Verified — " + me.vstatus}</span>
@@ -1606,7 +1848,8 @@ function renderRider() {
   <label>Amount sent (৳)</label><input id="payAmt" type="number" placeholder="e.g. 6"><label>bKash TrxID</label><input id="payTrx" placeholder="TrxID">
   <button class="btn" onclick="markPaid()">I Sent via bKash</button>
   <h3>🔔 New Orders (broadcast pool — first Accept wins)</h3>
-  ${!me.verified || me.banned || !me.online ? "<p class='muted'>Go online as a verified rider to see new orders.</p>" : !(me.areas && me.areas.length) ? "<p class='muted'>আগে উপরে আপনার ডেলিভারি এলাকা ঠিক করুন — এলাকা ছাড়া অর্ডার আসবে না।</p>" : pool.length ? pool.map(o => `<div class="panel"><b>${o.code}</b> — ${fmt(o.total)} • ${esc(o.area)} • ${esc(o.address)}<br><span class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</span><br><button class="btn gold" onclick="acceptOrder('${o.code}')">Accept — I will deliver</button></div>`).join("") : "<p>No new orders right now.</p>"}
+  ${newAlert}
+  ${!me.verified || me.banned || !me.online ? "<p class='muted'>Go online as a verified rider to see new orders.</p>" : !(me.areas && me.areas.length) ? "<p class='muted'>আগে উপরে আপনার ডেলিভারি এলাকা ঠিক করুন — এলাকা ছাড়া অর্ডার আসবে না।</p>" : pool.length ? pool.map(o => riderOrderPreviewHTML(o)).join("") : "<p>No new orders right now.</p>"}
   <h3>My Active Deliveries</h3>
   ${orders().filter(o => o.rider === me.name && o.status === "cancelled" && o.cancelledBy === "customer" && o.date === todayStr()).map(o => `<p class="area-warn">⚠️ কাস্টমার ক্যানসেল করেছে: <b>${esc(o.code)}</b></p>`).join("")}
   ${mine.length ? mine.map(o => {
@@ -1632,6 +1875,7 @@ function renderRider() {
     return `<div class="panel"><b>${o.code}</b> — ${STATUS_BN[o.status]} • ${fmt(o.total)} • ${esc(o.address)}<br>
     <div class="track-mini ${td.cls}">⏱ <span class="js-countdown" data-code="${o.code}">${td.big}</span> <span class="muted">${td.sub}</span></div>
     <span class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")} • ${esc(o.customer)} (${esc(o.phone)})</span>
+    ${orderMoneyHTML(o)}
     ${callDoneLine}
     <div class="statusflow">${STATUS_FLOW.slice(1).map(st => {
       const si = STATUS_FLOW.indexOf(st);
@@ -1662,17 +1906,27 @@ function toggleOnline() {
   const s = session(); if (!s) return; const all = users(); const me = all.find(u => u.phone === s.phone);
   if (!me.verified) return toast("Verify your NID first — unverified riders cannot go online.");
   if (me.banned) return toast("Account is OFF. Pay and contact the owner.");
-  me.online = !me.online; setUsers(all); save("bazar_session", me); renderAll();
+  me.online = !me.online; setUsers(all); save("bazar_session", me); syncOnlineToSupabase(me); renderAll();
 }
-function acceptOrder(code) {
+async function acceptOrder(code) {
   const s = session(); if (!s) return;
   const all = orders(); const o = all.find(x => x.code === code);
   if (!o || o.status !== "placed") return toast("Too late — another rider already accepted this order.");
   // v25: a rider who cancelled this order can never take it again.
   if ((o.declinedBy || []).includes(s.name)) return toast("আপনি এই অর্ডারটি ক্যানসেল করেছেন — আর নিতে পারবেন না।");
+  // v33: first Accept wins, enforced on Supabase — the conditional claim
+  // only succeeds while the row is still "placed" on the server.
+  let claimed = true;
+  try { claimed = await claimOrderSb(o, s.name); } catch (e) { claimed = true; }
+  if (!claimed) {
+    toast("Too late — another rider already accepted this order.");
+    try { loadOrders(); } catch {}
+    renderAll();
+    return;
+  }
   recordStatus(o, "accepted"); o.rider = s.name;
   o.callConfirmedAt = null; // fresh accept → the rider must call + confirm first (v25)
-  setOrders(all); syncOrderStatus(o); renderAll(); notify("You accepted " + code + ". কাস্টমারকে কল করে কনফার্ম করুন — তারপর পণ্য কিনুন।");
+  setOrders(all); syncOrderFull(o); renderAll(); notify("You accepted " + code + ". কাস্টমারকে কল করে কনফার্ম করুন — তারপর পণ্য কিনুন।");
 }
 // ---------- Rider call-to-confirm + cancel (v25) ----------
 // Tamim (24 Nov ~11:30–11:31, rider-app-spec.md §4): after Accept the rider
@@ -1701,7 +1955,7 @@ function confirmCall(code) {
   const now = new Date().toISOString();
   o.callConfirmedAt = now;
   o.statusLog = Object.assign({}, o.statusLog, { callConfirmed: now });
-  setOrders(all); renderAll(); notify(code + " — কাস্টমার কনফার্ম করেছে। এখন পণ্য কিনুন।");
+  setOrders(all); syncOrderFull(o); renderAll(); notify(code + " — কাস্টমার কনফার্ম করেছে। এখন পণ্য কিনুন।");
 }
 function askCancel(code) {
   // Reason picker (modal) — a cancel without a reason is not allowed.
@@ -1813,6 +2067,27 @@ let adminTab = "orders";
 let adminCustomers = null;
 let custQuery = "";
 function setAdminTab(t) { adminTab = t; renderAdmin(); if (t === "customers") loadCustomers(); }
+// v33 — admin order sections: one row renderer reused by Live Orders and
+// the four separate sections (delivered / cancelled / customer-cancelled /
+// rider-cancelled-with-history). Rider-cancelled orders are NOT status
+// "cancelled" — a rider cancel sends the order back to "placed" with a
+// cancelHistory entry, so that section lists orders with cancelHistory
+// entries and shows which rider cancelled, when, and the reason + note.
+// No invented fields: status, cancelledBy, cancelHistory, cancelledAt only.
+function adminOrderRow(o, showHistory) {
+  const log = o.statusLog || {}; const lastTs = log[o.status] || o.created;
+  const td = timerDisplay(o);
+  let timing = "";
+  if (o.status === "delivered") timing = td.lateMs <= 0 ? `<span class="pill ok">${bn(Math.round(td.totalMs / 60000))} মিনিটে ✓ সময়মতো</span>` : `<span class="pill bad">${bn(Math.round(td.lateMs / 60000))} মিনিট দেরি</span>`;
+  else if (o.status === "placed") timing = !ridersCovering(o.area).length ? `<span class="pill bad">⚠️ এই এলাকায় রাইডার নেই</span>` : `<span class="muted">রাইডার অপেক্ষায়</span>`;
+  else timing = `<span class="js-countdown" data-code="${o.code}">${td.big}</span><br><span class="muted">${td.sub}</span>`;
+  const hist = showHistory ? (o.cancelHistory || []).map(h => `<br><span class="muted">❌ ${esc(h.rider || "রাইডার")} • ${fmtTime(h.at)} • ${esc(h.reason)}${h.note ? " — " + esc(h.note) : ""}</span>`).join("") : "";
+  return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>${o.status === "cancelled" && o.cancelledBy === "customer" ? `<br><span class="muted">❌ কাস্টমার ক্যানসেল করেছে</span>` : (o.cancelHistory || []).length ? `<br><span class="muted">❌ ক্যানসেল: ${esc(lastCancelText(o))} (${esc(o.cancelledBy || "")})</span>` : ""}${hist}</td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
+}
+function adminOrderSection(title, list, showHistory) {
+  return `<h3>${title} (${list.length})</h3>
+  ${list.length ? `<table><tr><th>Order</th><th>Customer</th><th>Area</th><th>Total</th><th>Status</th><th>সময় / দেরি</th><th>Updated</th><th>Rider</th><th>ধন্যবাদ</th></tr>${list.slice(0, 20).map(o => adminOrderRow(o, showHistory)).join("")}</table>` : "<p class='muted'>কোনো অর্ডার নেই।</p>"}`;
+}
 function loadCustomers() {
   if (LIVE && sb) {
     try {
@@ -1856,7 +2131,14 @@ function renderAdmin() {
   }
   const all = orders(), t = todayStr(), todays = all.filter(o => o.date === t);
   loadAdminVerifs(false); // v32: verifications + riders from Supabase too
-  const sales = todays.reduce((a, o) => a + o.subtotal, 0), fees = todays.reduce((a, o) => a + o.fee, 0);
+  // v33: TODAY'S SUMMARY counts DELIVERED orders only — placed/cancelled
+  // never count. (The old code summed sales/fees over ALL of today's
+  // orders.) renderAdmin re-runs on every quietSync data change, so the
+  // summary recomputes live whenever an order becomes delivered.
+  const del = todays.filter(o => o.status === "delivered");
+  const dUnits = del.reduce((a, o) => a + (o.items || []).reduce((x, i) => x + (i.qty || 0), 0), 0);
+  const sales = del.reduce((a, o) => a + o.subtotal, 0), fees = del.reduce((a, o) => a + o.fee, 0);
+  const dDue = riderDue(del), dTen = dDue.deliveryDue, dDeposit = dDue.total;
   const riders = users().filter(u => u.role === "rider");
   const verifs = ls("bazar_verifications", []);
   const settlements = ls("bazar_settlements", []);
@@ -1869,22 +2151,28 @@ function renderAdmin() {
     <div class="stat"><b>${todays.length}</b>Orders today</div>
     <div class="stat"><b>${todays.filter(o => o.status === "delivered").length}</b>Delivered today</div>
     <div class="stat"><b>${todays.filter(o => o.status === "placed" || o.status === "accepted").length}</b>Pending</div>
-    <div class="stat"><b>${fmt(sales)}</b>Product sales today</div>
-    <div class="stat"><b>${fmt(fees)}</b>Delivery charges today</div>
+    <div class="stat"><b>${fmt(sales)}</b>Product sales today (delivered)</div>
+    <div class="stat"><b>${fmt(fees)}</b>Delivery charges today (delivered)</div>
     <div class="stat"><b>${fmt(riderDue(todays.filter(o => o.status === "delivered")).service)}</b>সার্ভিস চার্জ আজ</div><div class="stat"><b>${fmt(riderDue(todays.filter(o => o.status === "delivered")).total)}</b>রাইডারদের মোট জমা (সার্ভিস + ১০%)</div>
     <div class="stat"><b>${all.length}</b>Total orders (all time)</div>
   </div>
+  <h3>📊 আজকের হিসাব — শুধু ডেলিভারি হওয়া অর্ডার</h3>
+  <p class="muted">শুধু ডেলিভারি হওয়া অর্ডার গণনা করা হয় — প্লেসড বা ক্যানসেল অর্ডার এতে ধরা হয় না। অর্ডার ডেলিভারি হলেই এই হিসাব সাথে সাথে আপডেট হয়।</p>
+  <div class="statgrid" id="adminTodaySummary">
+    <div class="stat"><b>${dUnits}</b>মোট পণ্য বিক্রি (পিস)</div>
+    <div class="stat"><b>${fmt(sales)}</b>পণ্য বিক্রি (টাকা)</div>
+    <div class="stat"><b>${fmt(fees)}</b>ডেলিভারি চার্জ</div>
+    <div class="stat"><b>${fmt(dTen)}</b>ডেলিভারি চার্জের ১০%</div>
+    <div class="stat"><b>${fmt(dDue.service)}</b>সার্ভিস চার্জ (৳৫ × পণ্য)</div>
+    <div class="stat"><b>${fmt(dDeposit)}</b>আজ মালিকের কাছে মোট জমা</div>
+  </div>
   <h3>Live Orders ${all.filter(o => o.status === "placed").length ? `<span class="badge">${all.filter(o => o.status === "placed").length} new</span>` : ""}</h3>
   <table><tr><th>Order</th><th>Customer</th><th>Area</th><th>Total</th><th>Status</th><th>সময় / দেরি</th><th>Updated</th><th>Rider</th><th>ধন্যবাদ</th></tr>
-  ${all.length ? all.slice(0, 30).map(o => {
-    const log = o.statusLog || {}; const lastTs = log[o.status] || o.created;
-    const td = timerDisplay(o);
-    let timing = "";
-    if (o.status === "delivered") timing = td.lateMs <= 0 ? `<span class="pill ok">${bn(Math.round(td.totalMs / 60000))} মিনিটে ✓ সময়মতো</span>` : `<span class="pill bad">${bn(Math.round(td.lateMs / 60000))} মিনিট দেরি</span>`;
-    else if (o.status === "placed") timing = !ridersCovering(o.area).length ? `<span class="pill bad">⚠️ এই এলাকায় রাইডার নেই</span>` : `<span class="muted">রাইডার অপেক্ষায়</span>`;
-    else timing = `<span class="js-countdown" data-code="${o.code}">${td.big}</span><br><span class="muted">${td.sub}</span>`;
-    return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>${o.status === "cancelled" && o.cancelledBy === "customer" ? `<br><span class="muted">❌ কাস্টমার ক্যানসেল করেছে</span>` : (o.cancelHistory || []).length ? `<br><span class="muted">❌ ক্যানসেল: ${esc(lastCancelText(o))} (${esc(o.cancelledBy || "")})</span>` : ""}</td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
-  }).join("") : `<tr><td colspan="9">এখনো কোনো অর্ডার আসেনি — কাস্টমার অর্ডার করলেই এখানে দেখাবে।</td></tr>`}</table>
+  ${all.length ? all.slice(0, 30).map(o => adminOrderRow(o, false)).join("") : `<tr><td colspan="9">এখনো কোনো অর্ডার আসেনি — কাস্টমার অর্ডার করলেই এখানে দেখাবে।</td></tr>`}</table>
+  ${adminOrderSection("✅ ডেলিভারি হয়েছে", all.filter(o => o.status === "delivered"), false)}
+  ${adminOrderSection("❌ ক্যানসেল হয়েছে (সব)", all.filter(o => o.status === "cancelled"), false)}
+  ${adminOrderSection("❌ কাস্টমার ক্যানসেল করেছে", all.filter(o => o.status === "cancelled" && o.cancelledBy === "customer"), false)}
+  ${adminOrderSection("❌ রাইডার ক্যানসেল করেছে (অর্ডার আবার পুলে গেছে)", all.filter(o => (o.cancelHistory || []).length), true)}
   <h3>Rider Verification</h3>
   ${adminVerificationHTML(verifs, riders)}
   <h3>Daily Settlement — Tonight's Checklist (${t})</h3>
@@ -2080,6 +2368,141 @@ function showView(v) {
   if (PAGE === target) { if (v === "orders") renderMyOrders(); if (v === "admin") renderAdmin(); window.scrollTo(0, 0); return; }
   location.href = target;
 }
+// ---------- JS-driven animations (v33) ----------
+// CRITICAL (v26 lesson): Tamim's Windows has Animation effects OFF →
+// prefers-reduced-motion: reduce → Chromium creates NO CSS animation at
+// all, and the global reduced-motion rule in styles.css collapses every
+// CSS transition to .01ms. So NOTHING here uses CSS animation/transition
+// for visible motion — everything is driven by requestAnimationFrame /
+// IntersectionObserver + inline styles, which reduced-motion cannot kill.
+// Transform/opacity only (no layout thrash). Cheap and idempotent:
+// renderAll calls animatePage() after every re-render, and it only
+// touches elements it has not initialized yet. It never rebuilds the page
+// and never fights quietSync (v17) or the 1s tracking tick (v22).
+const _tweenSlots = new WeakMap();
+function jsTween(el, slot, dur, onUpdate, onDone) {
+  if (!el) return;
+  let slots = _tweenSlots.get(el);
+  if (!slots) { slots = {}; _tweenSlots.set(el, slots); }
+  if (slots[slot]) slots[slot]();
+  let raf = 0, dead = false;
+  const t0 = performance.now();
+  const step = now => {
+    if (dead) return;
+    const p = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - p, 3); // easeOutCubic
+    onUpdate(e, p);
+    if (p < 1) raf = requestAnimationFrame(step);
+    else { delete slots[slot]; if (onDone) onDone(); }
+  };
+  raf = requestAnimationFrame(step);
+  slots[slot] = () => { dead = true; cancelAnimationFrame(raf); delete slots[slot]; };
+}
+let _animPageDone = false, _animHeroDone = false, _revealObs = null;
+function animatePage() {
+  // Page fade-in once per page load.
+  if (!_animPageDone) {
+    _animPageDone = true;
+    const main = document.querySelector("main");
+    if (main) {
+      main.style.opacity = "0";
+      jsTween(main, "page", 380, e => { main.style.opacity = String(e); }, () => { main.style.opacity = ""; });
+    }
+  }
+  // Hero: headline fade-in + slow Ken Burns on the hero photo (once per load).
+  if (!_animHeroDone) {
+    const basket = document.querySelector(".hero-basket");
+    const head = document.querySelector(".hero-left h1");
+    const sub = document.querySelector(".hero-left p");
+    if (basket || head) {
+      _animHeroDone = true;
+      if (head) {
+        head.style.opacity = "0";
+        jsTween(head, "hero", 500, e => { head.style.opacity = String(e); head.style.transform = `translateY(${Math.round((1 - e) * 10)}px)`; }, () => { head.style.opacity = ""; head.style.transform = ""; });
+      }
+      if (sub) {
+        sub.style.opacity = "0";
+        jsTween(sub, "hero", 500, e => { sub.style.opacity = String(e); }, () => { sub.style.opacity = ""; });
+      }
+      if (basket) jsTween(basket, "kenburns", 9000, e => { basket.style.transform = `scale(${(1 + 0.06 * e).toFixed(4)})`; });
+    }
+  }
+  // Scroll reveal: cards/tiles fade + slide in as they enter view.
+  if (!_revealObs && "IntersectionObserver" in window) {
+    _revealObs = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        const el = en.target;
+        _revealObs.unobserve(el);
+        const from = 14;
+        el.style.opacity = "0";
+        el.style.transform = `translateY(${from}px)`;
+        el.style.animation = "none"; // kill the CSS fadeUp so JS owns the motion
+        jsTween(el, "reveal", 420, e => {
+          el.style.opacity = String(e);
+          el.style.transform = `translateY(${Math.round((1 - e) * from)}px)`;
+        }, () => { el.style.opacity = ""; el.style.transform = ""; el.dataset.animDone = "1"; });
+      });
+    }, { threshold: 0.08, rootMargin: "0px 0px 40px 0px" });
+  }
+  if (_revealObs) {
+    document.querySelectorAll(".card, .cat-tile, .why-tile, .howto-step, .promo").forEach(el => {
+      if (!el.dataset.anim) { el.dataset.anim = "1"; _revealObs.observe(el); }
+    });
+  }
+  // Hover lift + press states on buttons (JS tween; the CSS :hover still
+  // applies instantly under reduced-motion, this adds the smooth part).
+  document.querySelectorAll(".btn, .add, .qty-btn, .status-btn, .chip").forEach(el => {
+    if (el.dataset.animHover) return;
+    el.dataset.animHover = "1";
+    el.addEventListener("mouseenter", () => {
+      jsTween(el, "hover", 140, e => { el.style.transform = `translateY(${(-2 * e).toFixed(1)}px)`; });
+    });
+    el.addEventListener("mouseleave", () => {
+      jsTween(el, "hover", 140, e => { el.style.transform = `translateY(${(-2 * (1 - e)).toFixed(1)}px)`; }, () => { el.style.transform = ""; });
+    });
+    el.addEventListener("mousedown", () => { el.style.transform = "scale(.97)"; });
+    el.addEventListener("mouseup", () => { el.style.transform = "translateY(-2px)"; });
+  });
+  // Cards/tiles: JS hover lift via the `translate` property (the reveal
+  // owns `transform`, so the two never fight). The CSS :hover transform is
+  // neutralised once the reveal has finished.
+  document.querySelectorAll(".card, .cat-tile").forEach(el => {
+    if (el.dataset.animHover) return;
+    el.dataset.animHover = "1";
+    el.addEventListener("mouseenter", () => {
+      if (el.dataset.animDone) el.style.transform = "translateY(0)";
+      jsTween(el, "hover", 150, e => { el.style.translate = `0 ${(-3 * e).toFixed(1)}px`; });
+    });
+    el.addEventListener("mouseleave", () => {
+      jsTween(el, "hover", 150, e => { el.style.translate = `0 ${(-3 * (1 - e)).toFixed(1)}px`; }, () => { el.style.translate = ""; if (el.dataset.animDone) el.style.transform = ""; });
+    });
+  });
+}
+function flyToCart(id, imgSrc) {
+  // Small fly-to-cart cue: clone the product thumbnail and animate it
+  // (rAF) from the Add button to the header cart, then remove it.
+  try {
+    const btn = document.querySelector(`[onclick*="addToCart(${id})"]`);
+    const target = $("#cartBtn") || $("#cartCount");
+    if (!btn || !target) return;
+    const from = btn.getBoundingClientRect(), to = target.getBoundingClientRect();
+    const img = document.createElement("img");
+    img.className = "fly-img";
+    img.src = imgSrc || "";
+    img.style.left = (from.left + from.width / 2 - 20) + "px";
+    img.style.top = (from.top + from.height / 2 - 20) + "px";
+    document.body.appendChild(img);
+    const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+    jsTween(img, "fly", 520, e => {
+      img.style.left = (from.left + from.width / 2 - 20 + dx * e) + "px";
+      img.style.top = (from.top + from.height / 2 - 20 + dy * e) + "px";
+      img.style.transform = `scale(${(1 - 0.55 * e).toFixed(2)})`;
+      img.style.opacity = String(1 - 0.6 * e);
+    }, () => { try { img.remove(); } catch {} });
+  } catch {}
+}
 function renderAll() {
   const s = session();
   const who = $("#whoami"); if (who) who.textContent = s ? `Logged in: ${s.name} (${s.role})` : "";
@@ -2104,6 +2527,8 @@ function renderAll() {
   renderCart(); // header cart count + total, on every page (guarded inside)
   const newCount = orders().filter(o => o.status === "placed").length;
   const b = $("#orderBadge"); if (b) { b.textContent = newCount; b.classList.toggle("hidden", !newCount); }
+  attachPwEyes(); // v33: eye toggle on every password input, after any re-render
+  animatePage(); // v33: JS-driven page fade-in + scroll reveals + hero motion
 }
 // ---------- Init (v15.2) ----------
 // BUG (v15, found live): categories.html grid was EMPTY on first load —
@@ -2200,12 +2625,22 @@ function quietSync(force) {
   updateOrderBadge();
   updateHeaderCart();
   // Only the orders-related parts, and only on their own pages.
+  // v33: rider.html too — a new order arriving via loadOrders() must
+  // appear in the rider's pool without a manual refresh. userIsBusy()
+  // above already protects the rider while typing or in a modal.
   if (PAGE === "orders.html") renderMyOrders();
   else if (PAGE === "admin.html") renderAdmin();
+  else if (PAGE === "rider.html") renderRiderPage();
 }
 // Best-effort Supabase orders refresh (was called but never defined before
 // v17 — the realtime handler used to throw here). Merges Supabase rows into
 // the local order list, then lets the quiet sync decide what to update.
+// v33: full merge via sbRowToOrder (rider name, step timestamps, call
+// confirm, cancel history, declined list) + dirty guard: a local row with
+// a fresh _syncPending mark (< 15s) keeps its local status/rider so a
+// just-made local change is never clobbered by stale remote data.
+// Notify ONLY for genuinely NEW placed orders (not on every fetch — the
+// old code beeped on every realtime event that carried any rows).
 function loadOrders() {
   if (!LIVE || !sb) { quietSync(false); return; }
   try {
@@ -2213,21 +2648,41 @@ function loadOrders() {
       .then(({ data, error }) => {
         if (error || !Array.isArray(data) || !data.length) { quietSync(false); return; }
         const local = orders();
+        const before = new Set(local.map(o => o.code));
+        const fresh = [];
         data.forEach(r => {
           const code = r.order_code;
           const ex = local.find(o => o.code === code);
-          const mapped = { code, customer: r.customer_name, phone: r.customer_phone, area: r.area, address: r.delivery_address, items: r.items || [], subtotal: r.subtotal_bdt, fee: r.delivery_fee_bdt, total: r.total_bdt, status: r.status, statusLog: (ex && ex.statusLog) || { placed: r.created_at }, rider: (ex && ex.rider) || "", created: r.created_at, date: (r.created_at || "").slice(0, 10) };
+          // Fresh local write in flight (< 15s): keep the local row as-is.
+          if (ex && ex._syncPending && (Date.now() - ex._syncPending) < 15000) return;
+          const mapped = sbRowToOrder(r, ex);
+          if (!before.has(code)) fresh.push(mapped);
           if (ex) Object.assign(ex, mapped); else local.unshift(mapped);
         });
         setOrders(local);
+        if (fresh.length) {
+          const s = session();
+          const newPlaced = fresh.filter(o => o.status === "placed");
+          if (newPlaced.length && s && (s.role === "rider" || s.role === "admin")) {
+            notify("🔔 নতুন অর্ডার এসেছে: " + newPlaced.map(o => o.code + " • " + o.area).join(", "));
+          }
+        }
         quietSync(false);
-        notify("New order update");
       }).catch(() => quietSync(false));
   } catch (e) { quietSync(false); }
 }
 // Quiet poll every 8s: an order placed in another tab/device appears
-// (Supabase realtime does this live when configured).
-setInterval(() => { try { quietSync(false); } catch (e) {} }, 8000);
+// (Supabase realtime does this live when configured). v33: ALSO poll
+// loadOrders() on the order-facing pages — realtime is a single
+// websocket that can drop, and the poll is the backup that keeps the
+// rider pool / admin list / customer tracking cross-device. loadOrders
+// only re-renders when something actually changed (via quietSync).
+setInterval(() => {
+  try {
+    quietSync(false);
+    if (LIVE && (PAGE === "rider.html" || PAGE === "admin.html" || PAGE === "orders.html")) loadOrders();
+  } catch (e) {}
+}, 8000);
 // 1-second tick: update ONLY the countdown text nodes — never rebuild the
 // popup or the page. The popup is fully re-rendered only when the order's
 // STATUS itself changes (e.g. accepted → picked up).
