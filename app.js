@@ -12,7 +12,11 @@ const fmt = n => "৳" + Number(n || 0).toLocaleString("en-IN");
 // ---------- Multi-page (v15) ----------
 // One static site, one page per section — no more single endless page.
 // PAGE is the current file; QPARAMS reads ?cat=, ?q=, ?id=, ?track=, ?sort=.
-const PAGE = (location.pathname.split("/").pop() || "index.html").split("?")[0] || "index.html";
+// Cloudflare Pages serves clean URLs: /categories.html 308-redirects to
+// /categories, so location.pathname has no ".html" live. Normalize PAGE so
+// an extensionless last segment maps back to its .html file.
+const _raw = (location.pathname.split("/").pop() || "").split("?")[0];
+const PAGE = !_raw ? "index.html" : (_raw.includes(".") ? _raw : _raw + ".html");
 const QPARAMS = new URLSearchParams(location.search || "");
 const qp = k => QPARAMS.get(k) || "";
 
