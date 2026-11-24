@@ -54,6 +54,49 @@ function riderDue(list) {
   const deliveryDue = Math.round(ordersFeeSum(list) * 0.10);
   return { service, deliveryDue, total: service + deliveryDue };
 }
+// ---------- Phone & address validation (v25) ----------
+// Tamim (24 Nov ~11:30): a customer's phone and address MUST be valid —
+// no junk orders with fake numbers or gibberish addresses. A rider calls
+// the customer to confirm before buying, so a wrong number wastes the
+// rider's trip and money.
+// PHONE: only 11-digit Bangladeshi mobile (01XXXXXXXXX, prefix 013–019)
+// or 14 characters with country code (+8801XXXXXXXXX). Spaces/dashes are
+// stripped first; Bengali digits (০১৮৬৫…) are converted. "880…" WITHOUT
+// the + is rejected (13 digits — only 11, or +880 14-char, are accepted).
+// Returns the normalised 01… number, or "" when invalid.
+const PHONE_ERR = "সঠিক মোবাইল নম্বর দিন — ১১ ডিজিট (01XXXXXXXXX) অথবা +880 সহ ১৪ ডিজিট";
+const BN_DIGITS = { "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9" };
+function toLatinDigits(s) { return String(s || "").replace(/[০-৯]/g, d => BN_DIGITS[d]); }
+function normalisePhone(raw) {
+  let p = toLatinDigits(raw).replace(/[\s\-()]/g, "");
+  if (p.startsWith("+880")) p = "0" + p.slice(4);
+  else if (p.startsWith("880")) return ""; // 13 digits without + : NOT accepted
+  if (!/^01[3-9]\d{8}$/.test(p)) return "";
+  return p;
+}
+function isValidPhone(raw) { return normalisePhone(raw) !== ""; }
+// ADDRESS: a real, usable delivery address inside the delivery area —
+// minimum 12 characters, at least one digit (house/road/flat number) AND
+// letters, and must name one of the 8 delivery areas (Bangla or English).
+// Gibberish (one character repeated, no digits, too short, no area) is
+// rejected. Returns {ok:true} or {ok:false, error}.
+const ADDRESS_ERR = "সঠিক ঠিকানা দিন — বাড়ি/রোড নম্বরসহ আপনার এলাকার নাম লিখুন (যেমন: বাড়ি ১২, রোড ৫, ডেমরা)";
+const AREA_MATCHERS = [
+  ["demra", "ডেমরা"], ["sarulia", "সারুলিয়া"], ["matuail", "মাতুয়াইল"],
+  ["konapara", "কোনাপাড়া"], ["staff quarter", "staff", "স্টাফ কোয়ার্টার", "স্টাফ"],
+  ["jatrabari", "যাত্রাবাড়ী"], ["shyampur", "শ্যামপুর"], ["kadamtali", "কদমতলী"]
+];
+function validateAddress(addr) {
+  const a = String(addr || "").trim();
+  if (a.length < 12) return { ok: false, error: ADDRESS_ERR };
+  if (!/[0-9০-৯]/.test(a)) return { ok: false, error: ADDRESS_ERR }; // needs a house/road number
+  if (!/[a-zA-Z\u0980-\u09ff]/.test(a)) return { ok: false, error: ADDRESS_ERR }; // needs letters too
+  const chars = a.replace(/[\s,.\-#/]/g, "");
+  if (chars.length && [...new Set(chars.toLowerCase())].length <= 1) return { ok: false, error: ADDRESS_ERR }; // "aaaaaaa…"
+  const low = a.toLowerCase();
+  if (!AREA_MATCHERS.some(list => list.some(n => low.includes(n)))) return { ok: false, error: ADDRESS_ERR };
+  return { ok: true };
+}
 const $ = s => document.querySelector(s);
 const ls = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -94,16 +137,17 @@ function initSupabase() {
 function shellHTML() {
   const cats = ["All", ...window.BAZARKORI_CATEGORIES];
   const active = (p) => PAGE === p ? " active" : "";
+  // v25 ticker: the 3-message set is repeated 3× inside EACH track (9 spans).
+  // ROOT CAUSE (v24): one set per track made a 776px track at phone width —
+  // 35px/s, barely noticeable — AND the :hover pause rule (now removed from
+  // styles.css) froze it whenever the cursor rested on the strip (PC) or a
+  // tap left a stuck :hover (phone). 3× repeats ≈ 2,330px/track at 390px
+  // (≈106px/s) and ≈2,700px at desktop — unmistakable motion, same 22s
+  // loop, both tracks identical so the loop stays seamless.
+  const topMsgs = `<span>📍 Demra Thana + আশেপাশের এলাকা</span><span>🚚 ফ্ল্যাট ৳৩০ ডেলিভারি • 💵 COD</span><span>📞 <a href="tel:01865861015">01865-861015</a> • ⏰ খোলা: রাত ১২টা পর্যন্ত</span>`;
+  const topTrack = topMsgs + topMsgs + topMsgs;
   return `
-<div class="topbar"><div class="topbar-track">
-  <span>📍 Demra Thana + আশেপাশের এলাকা</span>
-  <span>🚚 ফ্ল্যাট ৳৩০ ডেলিভারি • 💵 COD</span>
-  <span>📞 <a href="tel:01865861015">01865-861015</a> • ⏰ খোলা: রাত ১২টা পর্যন্ত</span>
-</div><div class="topbar-track" aria-hidden="true">
-  <span>📍 Demra Thana + আশেপাশের এলাকা</span>
-  <span>🚚 ফ্ল্যাট ৳৩০ ডেলিভারি • 💵 COD</span>
-  <span>📞 <a href="tel:01865861015">01865-861015</a> • ⏰ খোলা: রাত ১২টা পর্যন্ত</span>
-</div></div>
+<div class="topbar"><div class="topbar-track">${topTrack}</div><div class="topbar-track" aria-hidden="true">${topTrack}</div></div>
 <header>
   <div class="hdr-row">
     <a class="logo" href="index.html" style="text-decoration:none"><img class="logo-img" src="logo.png" alt="বাজার করি"><span class="logo-tag">তাজা। সস্তা। ২৫ মিনিটে।</span></a>
@@ -168,7 +212,7 @@ function footerHTML() {
     </div>
     <div class="footer-col">
       <b>Contact Us</b>
-      <p>📍 Demra Thana, Dhaka<br>📞 <a href="tel:01865861015">01865-861015</a><br>💬 <a href="https://wa.me/8801865861015">WhatsApp</a><br>✉️ tamimmolla81@gmail.com<br>⏰ খোলা: রাত ১২টা পর্যন্ত</p>
+      <p>📍 Demra Thana, Dhaka<br>📞 <a href="tel:01865861015">01865-861015</a><br>💬 <a href="https://wa.me/8801865861015">WhatsApp</a><br>✉️ <a href="mailto:bazarkori.shop.bd@gmail.com">bazarkori.shop.bd@gmail.com</a><br>⏰ খোলা: রাত ১২টা পর্যন্ত</p>
       <b>We Accept</b>
       <p class="pay-badges"><span>COD</span><span>bKash</span></p>
     </div>
@@ -344,6 +388,7 @@ const CUSTOMER_TERMS_HTML = `<div class="terms-box">
     <li>💵 পেমেন্ট: Cash on Delivery — পণ্য হাতে পেয়ে তারপর টাকা দিন।</li>
     <li>🏷️ সব পণ্য MRP দামে — কোনো ডিসকাউন্ট বা লুকানো চার্জ নেই।</li>
     <li>🛎️ সার্ভিস চার্জ: প্রতি পণ্যে ৳৫ (MRP-র উপরে) — এই চার্জে আমরা অর্ডার, রাইডার আর ডেলিভারি সাজিয়ে দিই।</li>
+    <li>📱 সঠিক মোবাইল নম্বর (১১ ডিজিট) আর বাড়ি/রোড নম্বরসহ পুরো ঠিকানা দিতে হবে — ভুল নম্বর/ঠিকানায় অর্ডার নেওয়া হবে না। রাইডার পণ্য কেনার আগে আপনাকে কল করে কনফার্ম করবে যে অর্ডারটা নিবেন কিনা।</li>
     <li>🕛 খোলা: রাত ১২টা পর্যন্ত।</li>
   </ul>
 </div>`;
@@ -364,7 +409,11 @@ function openRegister() {
   $("#modal").classList.add("open");
 }
 // One unified login (phone + password). Used by the modal AND the login page.
+// v25: the phone is validated + normalised first (01710000002 and
+// +8801710000002 both reach the same stored 01… account).
 function loginWith(phone, pass) {
+  phone = normalisePhone(phone);
+  if (!phone) return toast(PHONE_ERR);
   const u = users().find(x => x.phone === phone);
   if (!u || u.pass !== pass) return toast("ভুল ফোন নম্বর বা পাসওয়ার্ড।");
   if (u.role === "rider") {
@@ -387,6 +436,11 @@ function doLogin() { const p = $("#aPhone"), w = $("#aPass"); if (p && w) loginW
 function loginFromPage() { const p = $("#lpPhone"), w = $("#lpPass"); if (p && w) loginWith(p.value.trim(), w.value); }
 function registerWith(name, phone, pass, addr, area) {
   if (!name || !phone || !pass || !addr) return toast("নাম, ফোন, পাসওয়ার্ড ও ঠিকানা — সবগুলো দিন।");
+  // v25: valid phone + valid address are REQUIRED to create an account.
+  phone = normalisePhone(phone);
+  if (!phone) return toast(PHONE_ERR);
+  const av = validateAddress(addr);
+  if (!av.ok) return toast(av.error);
   if (users().some(x => x.phone === phone)) return toast("এই ফোন নম্বরটি ইতিমধ্যে রেজিস্টার করা আছে। লগইন করুন।");
   const u = { phone, name, role: "customer", pass, area: area || window.BAZARKORI_AREAS[0], address: addr, verified: true, vstatus: "verified", online: false, banned: false };
   const all = users(); all.push(u); setUsers(all);
@@ -424,8 +478,13 @@ function openProfileModal() {
 }
 function saveProfile() {
   const s = session(); if (!s) return;
-  const name = $("#pName").value.trim(), phone = $("#pPhone").value.trim(), addr = $("#pAddr").value.trim();
-  if (!name || !phone || !addr) return toast("নাম, ফোন নম্বর ও ঠিকানা — তিনটাই দিন।");
+  const name = $("#pName").value.trim(), phoneRaw = $("#pPhone").value.trim(), addr = $("#pAddr").value.trim();
+  if (!name || !phoneRaw || !addr) return toast("নাম, ফোন নম্বর ও ঠিকানা — তিনটাই দিন।");
+  // v25: saved profile must also hold a valid phone + valid address.
+  const phone = normalisePhone(phoneRaw);
+  if (!phone) return toast(PHONE_ERR);
+  const av = validateAddress(addr);
+  if (!av.ok) return toast(av.error);
   if (phone !== s.phone && users().some(x => x.phone === phone)) return toast("এই ফোন নম্বরটি অন্য অ্যাকাউন্টে আছে।");
   saveProfileData(s.phone, { name, phone, address: addr });
   closeModal(); renderAll(); toast("প্রোফাইল সংরক্ষণ হয়েছে। পরের অর্ডারে তথ্য নিজে থেকেই বসবে।");
@@ -821,8 +880,14 @@ function createOrder(name, phone, addr, area) {
 function placeOrder() {
   const s = requireLogin("customer"); if (!s) return;
   const c = cart(); if (!c.length) return toast("Cart is empty.");
-  const name = $("#coName").value.trim() || s.name, phone = $("#coPhone").value.trim() || s.phone, addr = $("#coAddr").value.trim(), area = $("#coArea").value;
-  if (!addr || !phone) return toast("Enter address and phone.");
+  const name = $("#coName").value.trim() || s.name, phoneRaw = $("#coPhone").value.trim() || s.phone, addr = $("#coAddr").value.trim(), area = $("#coArea").value;
+  if (!addr || !phoneRaw) return toast("Enter address and phone.");
+  // v25: the order only goes through with a valid phone + valid address —
+  // the rider will call this number to confirm before buying.
+  const phone = normalisePhone(phoneRaw);
+  if (!phone) return toast(PHONE_ERR);
+  const av = validateAddress(addr);
+  if (!av.ok) return toast(av.error);
   const o = createOrder(name, phone, addr, area); if (!o) return;
   renderCart(); renderAll();
   openTrackPopup(o.code, { justPlaced: true }); // animated tracking popup, right here — no navigation yet
@@ -876,10 +941,16 @@ function placeOrderPopup() {
   const s = requireLogin("customer"); if (!s) return;
   const c = cart(); if (!c.length) return toast("Cart is empty.");
   const name = ($("#pCoName") && $("#pCoName").value.trim()) || s.name;
-  const phone = ($("#pCoPhone") && $("#pCoPhone").value.trim()) || s.phone;
+  const phoneRaw = ($("#pCoPhone") && $("#pCoPhone").value.trim()) || s.phone;
   const addr = $("#pCoAddr") ? $("#pCoAddr").value.trim() : "";
   const area = $("#pCoArea") ? $("#pCoArea").value : window.BAZARKORI_AREAS[0];
-  if (!addr || !phone) return toast("Enter address and phone.");
+  if (!addr || !phoneRaw) return toast("Enter address and phone.");
+  // v25: the order only goes through with a valid phone + valid address —
+  // the rider will call this number to confirm before buying.
+  const phone = normalisePhone(phoneRaw);
+  if (!phone) return toast(PHONE_ERR);
+  const av = validateAddress(addr);
+  if (!av.ok) return toast(av.error);
   const o = createOrder(name, phone, addr, area); if (!o) return;
   renderCart(); closeModal();
   openTrackPopup(o.code, { justPlaced: true }); // animated tracking popup, right here — no navigation yet
@@ -981,6 +1052,8 @@ function renderTrackPopup() {
   <p class="muted">${fmt(o.total)} • ${esc(o.area)} • ${esc(o.address || "")}</p>
   <p class="muted">⚖️ মোট ওজন: ${fmtKg(o.weightKg != null ? o.weightKg : cartWeightKg(o.items))} • ডেলিভারি চার্জ ${fmt(orderFee(o))}</p>
   ${trackerHTML(o)}
+  ${o.callConfirmedAt ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(o.callConfirmedAt)}</p>` : ""}
+  ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (কারণ: ${esc(o.cancelHistory[o.cancelHistory.length - 1].reason)})</p>` : ""}
   <div class="track-timer ${t.cls}">${t.big}</div>
   <p class="track-sub">${t.sub}</p>
   ${unmatched ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো রাইডার নেই</p>` : ""}
@@ -1059,6 +1132,8 @@ function renderMyOrders() {
     <button class="btn small gold" onclick="openTrackPopup('${o.code}')">📍 লাইভ ট্র্যাক</button>
     ${o.status === "placed" && !ridersCovering(o.area).length ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো রাইডার নেই</p>` : ""}
     <div class="timeline">${STEPS.map((st, i) => `<div class="step ${i < idx ? "done" : i === idx ? "now" : ""}">${i < idx ? "✓ " : ""}${st[1]}${log[st[0]] ? `<br><span class="muted">${fmtTime(log[st[0]])}</span>` : ""}</div>`).join("")}</div>
+    ${log.callConfirmed ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(log.callConfirmed)}</p>` : ""}
+    ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (কারণ: ${esc(o.cancelHistory[o.cancelHistory.length - 1].reason)})</p>` : ""}
     ${o.rider ? `<p>🚴 রাইডার: <b>${esc(o.rider)}</b>${o.status === "delivered" ? " • ডেলিভারি সম্পন্ন হয়েছে। ধন্যবাদ!" : o.status === "on_the_way" ? " • আপনার পার্সেল নিয়ে রাস্তায় আছে, শীঘ্রই পৌঁছে যাবে।" : o.status === "picked_up" ? " • পণ্য কিনে ফেলেছে, এখন রওনা হবে।" : " • আপনার অর্ডার নিয়েছে।"}</p>` : "<p class='muted'>রাইডারের জন্য অপেক্ষা করছি…</p>"}
     <p class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</p></div>`;
   }).join("") : "<p>এখনো কোনো অর্ডার নেই — প্রথম অর্ডার করলেই এখানে দেখাবে।</p>");
@@ -1075,7 +1150,8 @@ function renderRider() {
   const s = session();
   if (!s || s.role !== "rider") { el.innerHTML = `<p>রাইডাররা অ্যাপ ব্যবহার করুন — রাইডার প্যানেল এখন শুধু Android অ্যাপে আছে।</p>`; return; }
   const me = users().find(u => u.phone === s.phone) || s;
-  const pool = orders().filter(o => o.status === "placed" && (me.areas || []).includes(o.area));
+  // v25: re-broadcast pool skips orders THIS rider cancelled (declinedBy).
+  const pool = orders().filter(o => o.status === "placed" && (me.areas || []).includes(o.area) && !(o.declinedBy || []).includes(me.name));
   const mine = orders().filter(o => o.rider === me.name && o.status !== "delivered");
   const doneToday = orders().filter(o => o.rider === me.name && o.status === "delivered" && o.date === todayStr());
   const earnings = ordersFeeSum(doneToday), rd = riderDue(doneToday), due = rd.total; // v24: ৳5/unit service + 10% of delivery fees
@@ -1112,14 +1188,31 @@ function renderRider() {
     const next = STATUS_FLOW[idx + 1];
     const NEXT_BTN = { picked_up: "🛍️ পণ্য কিনেছি — Bought / Picked up", on_the_way: "🛵 রাস্তায় আছি — On the way", delivered: "✅ ডেলিভারি করেছি — Delivered" };
     const td = timerDisplay(o);
+    // v25 call-to-confirm: after Accept, the FIRST step is calling the
+    // customer. The buy-products button stays hidden until the rider taps
+    // "কাস্টমার কনফার্ম করেছে" (confirmCall). The tel: link opens the
+    // phone's own dialer, so the call goes from the rider's own SIM.
+    const needsCall = o.status === "accepted" && !o.callConfirmedAt;
+    const callBlock = needsCall ? `<div class="panel" style="background:#fff7d6;border-color:#f5a623;margin:8px 0">
+      <b>📞 কাস্টমারকে কল করুন</b><br>
+      <span class="muted">কল দিয়ে কনফার্ম করুন — উনি অর্ডারটা নিবেন কিনা। কল আপনার নিজের সিম থেকে যাবে।</span><br>
+      <a class="btn gold" style="display:inline-block;margin-top:8px;text-decoration:none" href="tel:${esc(o.phone)}">📞 ${esc(o.phone)} — কল করুন</a>
+      <button class="btn" style="margin-top:8px" onclick="confirmCall('${o.code}')">✅ কাস্টমার কনফার্ম করেছে</button>
+      <p class="muted">কাস্টমার না নিলে নিচে "অর্ডার ক্যানসেল করুন" চাপুন — পণ্য কিনবেন না।</p></div>` : "";
+    const callDoneLine = o.callConfirmedAt ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(o.callConfirmedAt)}</p>` : "";
+    // v25 cancel: visible after Accept, any time before delivery.
+    const cancelBtn = o.status !== "delivered" ? `<button class="btn danger" style="width:100%;margin-top:6px" onclick="askCancel('${o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : "";
     return `<div class="panel"><b>${o.code}</b> — ${STATUS_BN[o.status]} • ${fmt(o.total)} • ${esc(o.address)}<br>
     <div class="track-mini ${td.cls}">⏱ <span class="js-countdown" data-code="${o.code}">${td.big}</span> <span class="muted">${td.sub}</span></div>
     <span class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")} • ${esc(o.customer)} (${esc(o.phone)})</span>
+    ${callDoneLine}
     <div class="statusflow">${STATUS_FLOW.slice(1).map(st => {
       const si = STATUS_FLOW.indexOf(st);
       return `<div class="statusstep ${si < idx ? "done" : si === idx ? "now" : ""}">${si < idx ? "✓ " : ""}${STATUS_BN[st]}${log[st] ? `<br><span class="muted">${fmtTime(log[st])}</span>` : ""}</div>`;
     }).join("")}</div>
-    ${next ? `<button class="status-btn" onclick="setStatus('${o.code}','${next}')">${NEXT_BTN[next]}</button>` : ""}
+    ${callBlock}
+    ${next && !needsCall ? `<button class="status-btn" onclick="setStatus('${o.code}','${next}')">${NEXT_BTN[next]}</button>` : ""}
+    ${cancelBtn}
     <p class="muted">এক ধাপ করে আপডেট করুন — কাস্টমার তার ফোনে সাথে সাথে দেখতে পাবে।</p></div>`;
   }).join("") : "<p>এখনো কোনো ডেলিভারি নেই।</p>"}
   <h3>✅ আজ ডেলিভারি হয়েছে</h3>
@@ -1147,7 +1240,76 @@ function acceptOrder(code) {
   const s = session(); if (!s) return;
   const all = orders(); const o = all.find(x => x.code === code);
   if (!o || o.status !== "placed") return toast("Too late — another rider already accepted this order.");
-  recordStatus(o, "accepted"); o.rider = s.name; setOrders(all); syncOrderStatus(o); renderAll(); notify("You accepted " + code + ". Buy with your own money and deliver.");
+  // v25: a rider who cancelled this order can never take it again.
+  if ((o.declinedBy || []).includes(s.name)) return toast("আপনি এই অর্ডারটি ক্যানসেল করেছেন — আর নিতে পারবেন না।");
+  recordStatus(o, "accepted"); o.rider = s.name;
+  o.callConfirmedAt = null; // fresh accept → the rider must call + confirm first (v25)
+  setOrders(all); syncOrderStatus(o); renderAll(); notify("You accepted " + code + ". কাস্টমারকে কল করে কনফার্ম করুন — তারপর পণ্য কিনুন।");
+}
+// ---------- Rider call-to-confirm + cancel (v25) ----------
+// Tamim (24 Nov ~11:30–11:31, rider-app-spec.md §4): after Accept the rider
+// MUST call the customer (tel: link → the rider's own SIM dialer) and
+// confirm the customer will actually take the order. Only then does the
+// "পণ্য কিনেছি" step unlock. If the customer refuses / can't be reached /
+// the address is wrong, the rider CANCELS with a reason — the order goes
+// back to broadcast for other riders, keeps its code + history, and the
+// cancelling rider can never accept it again. Cancelled orders never count
+// in daily fee/service totals (only delivered orders ever count — see
+// riderDue/ordersFeeSum callers, which all filter status === "delivered").
+const CANCEL_REASONS = ["কাস্টমার অর্ডার নিবে না", "কাস্টমারকে ফোনে পাওয়া যাচ্ছে না", "ভুল ঠিকানা", "অন্য কারণ"];
+function confirmCall(code) {
+  // Rider tapped "✅ কাস্টমার কনফার্ম করেছে" after calling the customer.
+  const s = session(); if (!s || s.role !== "rider") return toast("Login as a rider first.");
+  const all = orders(); const o = all.find(x => x.code === code); if (!o) return;
+  if (o.rider !== s.name) return toast("This order is not yours.");
+  if (o.status !== "accepted") return toast("এই ধাপে আর কল-কনফার্ম লাগবে না।");
+  const now = new Date().toISOString();
+  o.callConfirmedAt = now;
+  o.statusLog = Object.assign({}, o.statusLog, { callConfirmed: now });
+  setOrders(all); renderAll(); notify(code + " — কাস্টমার কনফার্ম করেছে। এখন পণ্য কিনুন।");
+}
+function askCancel(code) {
+  // Reason picker (modal) — a cancel without a reason is not allowed.
+  const o = orders().find(x => x.code === code); if (!o) return;
+  openModal(`<div class="pop">
+    <button class="pop-close" onclick="closeModal()" aria-label="Close">✕</button>
+    <h2>❌ অর্ডার ক্যানসেল করুন — ${esc(code)}</h2>
+    <p class="muted">অর্ডারটি আবার অন্য রাইডারদের কাছে যাবে। আপনি এই অর্ডারটি আর নিতে পারবেন না।</p>
+    <label>ক্যানসেলের কারণ (আবশ্যক)</label>
+    ${CANCEL_REASONS.map((r, i) => `<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="radio" name="cancelReason" value="${esc(r)}" style="width:auto" ${i === 0 ? "checked" : ""}> <span>${esc(r)}</span></label>`).join("")}
+    <label>নোট (ঐচ্ছিক)</label><input id="cancelNote" placeholder="যেমন: ৩ বার কল দিয়েছি, ধরেনি">
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn danger" onclick="confirmCancel('${code}')">ক্যানসেল নিশ্চিত করুন</button><button class="btn ghost" onclick="closeModal()">ফিরে যান</button></div>
+  </div>`);
+}
+function confirmCancel(code) {
+  const sel = document.querySelector('input[name="cancelReason"]:checked');
+  const reason = sel ? sel.value : "";
+  const note = ($("#cancelNote") && $("#cancelNote").value.trim()) || "";
+  closeModal();
+  cancelOrder(code, reason, note);
+}
+function cancelOrder(code, reason, note) {
+  const s = session(); if (!s || s.role !== "rider") return toast("Login as a rider first.");
+  const all = orders(); const o = all.find(x => x.code === code); if (!o) return;
+  if (o.rider !== s.name) return toast("This order is not yours.");
+  if (o.status === "delivered" || o.status === "placed") return toast("এই অর্ডারটি আর ক্যানসেল করা যাবে না।");
+  if (!reason) return toast("ক্যানসেলের কারণ বেছে নিন।");
+  const now = new Date().toISOString();
+  o.cancelHistory = o.cancelHistory || [];
+  o.cancelHistory.push({ rider: s.name, reason, note: note || "", at: now });
+  o.declinedBy = o.declinedBy || [];
+  if (!o.declinedBy.includes(s.name)) o.declinedBy.push(s.name);
+  o.cancelledBy = s.name; o.cancelReason = reason; o.cancelNote = note || ""; o.cancelledAt = now;
+  // Back to broadcast: clear the rider + the in-progress steps, so the
+  // next rider starts clean. The original "placed" time stays — the order
+  // keeps its code and full history (cancelHistory above).
+  o.rider = ""; o.callConfirmedAt = null;
+  o.statusLog = o.statusLog || {};
+  delete o.statusLog.accepted; delete o.statusLog.callConfirmed;
+  delete o.statusLog.picked_up; delete o.statusLog.on_the_way; delete o.statusLog.delivered;
+  o.status = "placed";
+  setOrders(all); syncOrderStatus(o); renderAll();
+  notify(code + " ক্যানসেল হয়েছে — নতুন রাইডার খুঁজছি…");
 }
 function setStatus(code, st) {
   // v7 guard: only the rider who accepted this order, and only the NEXT step —
@@ -1157,6 +1319,9 @@ function setStatus(code, st) {
   if (o.rider !== s.name) return toast("This order is not yours.");
   const expected = STATUS_FLOW[STATUS_FLOW.indexOf(o.status) + 1];
   if (st !== expected) return toast("ধাপ বাদ দেওয়া যাবে না — আগে '" + (STATUS_BN[expected] || expected) + "' করতে হবে।");
+  // v25: the buy-products step stays LOCKED until the rider calls the
+  // customer and taps "কাস্টমার কনফার্ম করেছে" (confirmCall).
+  if (st === "picked_up" && !o.callConfirmedAt) return toast("আগে কাস্টমারকে কল করে কনফার্ম করুন — তারপর পণ্য কিনুন।");
   recordStatus(o, st); setOrders(all); syncOrderStatus(o); renderAll(); notify(code + " → " + (STATUS_BN[st] || st));
 }
 function markPaid() {
@@ -1247,7 +1412,7 @@ function renderAdmin() {
     if (o.status === "delivered") timing = td.lateMs <= 0 ? `<span class="pill ok">${bn(Math.round(td.totalMs / 60000))} মিনিটে ✓ সময়মতো</span>` : `<span class="pill bad">${bn(Math.round(td.lateMs / 60000))} মিনিট দেরি</span>`;
     else if (o.status === "placed") timing = !ridersCovering(o.area).length ? `<span class="pill bad">⚠️ এই এলাকায় রাইডার নেই</span>` : `<span class="muted">রাইডার অপেক্ষায়</span>`;
     else timing = `<span class="js-countdown" data-code="${o.code}">${td.big}</span><br><span class="muted">${td.sub}</span>`;
-    return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span></td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
+    return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>${(o.cancelHistory || []).length ? `<br><span class="muted">❌ ক্যানসেল: ${esc(o.cancelHistory[o.cancelHistory.length - 1].reason)} (${esc(o.cancelledBy || "")})</span>` : ""}</td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
   }).join("") : `<tr><td colspan="9">এখনো কোনো অর্ডার আসেনি — কাস্টমার অর্ডার করলেই এখানে দেখাবে।</td></tr>`}</table>
   <h3>Rider Verification</h3>
   ${verifs.length ? verifs.map((v, i) => `<div class="panel"><b>${esc(v.nidName)}</b> (${esc(v.rider)}) • NID ${esc(v.nid)} • ${esc(v.phone)} • <span class="pill ${v.status === "verified" ? "ok" : v.status === "rejected" ? "bad" : "warn"}">${v.status}</span><br>
