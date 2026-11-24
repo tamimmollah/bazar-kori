@@ -78,6 +78,37 @@ function normalisePhone(raw) {
   return p;
 }
 function isValidPhone(raw) { return normalisePhone(raw) !== ""; }
+// ---------- Demo/test hiding in admin (v35) ----------
+// Tamim (24 Nov ~18:05): anything placed/done from a demo or test
+// account must NEVER appear in the admin panel — no demo orders, no
+// demo customers, no demo riders. The seed marks demo accounts only by
+// phone (no demo flag), so the phone set below is the single source of
+// truth. Nothing is ever deleted — the admin render/stat layer just
+// filters. Customer views (My Orders, tracking) and the rider panel
+// keep showing demo activity exactly as before.
+// An order counts as demo if its CUSTOMER phone is a demo phone; a
+// rider / payout / settlement / verification counts as demo if its
+// RIDER phone is a demo phone.
+const DEMO_PHONES = new Set(["01710000002", "01710000003", "01710000004", "01710000005", "01710000006", "01710000007", "01710000008", "01710000009"]);
+function isDemoPhone(p) {
+  if (!p) return false;
+  const n = normalisePhone(String(p));
+  if (n) return DEMO_PHONES.has(n);
+  return DEMO_PHONES.has(toLatinDigits(String(p)).replace(/[\s\-()]/g, ""));
+}
+function isDemoOrder(o) { return !!o && isDemoPhone(o.phone); }
+function isDemoUser(u) { return !!u && isDemoPhone(u.phone); }
+// Admin toggle, persisted in localStorage (default OFF = hidden). When
+// ON the admin shows everything again, so a future test check can
+// still verify the admin panel.
+function adminShowDemo() { return !!ls("bazar_admin_show_demo", false); }
+function toggleAdminShowDemo() { save("bazar_admin_show_demo", !adminShowDemo()); renderAdmin(); }
+function adminVisibleOrders(list) { return adminShowDemo() ? (list || []) : (list || []).filter(o => !isDemoOrder(o)); }
+function adminVisibleUsers(list) { return adminShowDemo() ? (list || []) : (list || []).filter(u => !isDemoUser(u)); }
+function adminDemoToggleHTML() {
+  const on = adminShowDemo();
+  return `<button class="btn ${on ? "gold" : "ghost"}" onclick="toggleAdminShowDemo()">${on ? "👁️ ডেমো/টেস্ট ডেটা দেখানো হচ্ছে" : "🙈 ডেমো/টেস্ট ডেটা লুকানো"}</button>`;
+}
 // EMAIL (v30): registration now requires a real email address — the
 // 6-digit verification code goes to this email. One account per email,
 // like the one-account-per-phone rule.
@@ -2261,7 +2292,9 @@ function loadCustomers() {
 function renderCustomerList(q) {
   custQuery = q || "";
   const el = $("#custList"); if (!el) return;
-  const list = adminCustomers || users().filter(u => u.role === "customer");
+  // v35: demo/test customers never appear in the admin Customers tab
+  // (toggle ON shows them again).
+  const list = adminVisibleUsers(adminCustomers || users().filter(u => u.role === "customer"));
   const needle = custQuery.trim().toLowerCase();
   const filtered = needle ? list.filter(c => (c.name || "").toLowerCase().includes(needle) || (c.phone || "").includes(needle)) : list;
   const all = orders();
@@ -2276,16 +2309,22 @@ function renderAdmin() {
   if (!el) return;
   if (!s || s.role !== "admin") { el.innerHTML = `<p>Admin panel is for the owner only. There is <b>no admin registration</b>.</p><button class="btn" onclick="openAuth()">লগইন</button>`; return; }
   if (adminTab === "customers") {
-    el.innerHTML = `<div style="display:flex;gap:8px;margin-bottom:12px">
+    el.innerHTML = `<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
     <button class="btn ghost" onclick="setAdminTab('orders')">📦 অর্ডার</button>
-    <button class="btn" onclick="setAdminTab('customers')">👥 কাস্টমার</button></div>
+    <button class="btn" onclick="setAdminTab('customers')">👥 কাস্টমার</button>
+    ${adminDemoToggleHTML()}</div>
+    ${adminShowDemo() ? `<p class="muted" style="color:#b45309">⚠️ ডেমো/টেস্ট ডেটা দেখানো হচ্ছে — ডেমো কাস্টমার/রাইডারের তথ্যও এই প্যানেলে দেখাচ্ছে।</p>` : `<p class="muted">ডেমো/টেস্ট অ্যাকাউন্ট এই প্যানেলে দেখানো হয় না।</p>`}
     <h3>কাস্টমার — নাম বা ফোন নম্বর দিয়ে খুঁজুন</h3>
     <input id="custSearch" placeholder="নাম বা ফোন নম্বর লিখুন…" value="${esc(custQuery)}" oninput="renderCustomerList(this.value)">
     <div id="custList"></div>`;
     if (!adminCustomers) loadCustomers(); else renderCustomerList(custQuery);
     return;
   }
-  const all = orders(), t = todayStr(), todays = all.filter(o => o.date === t);
+  // v35: demo/test orders are filtered out ONCE here — every stat,
+  // the Live Orders table and all four sections below derive from
+  // this list, so demo orders can never inflate an admin number.
+  // (Toggle ON returns the full list again.)
+  const all = adminVisibleOrders(orders()), t = todayStr(), todays = all.filter(o => o.date === t);
   loadAdminVerifs(false); // v32: verifications + riders from Supabase too
   // v33: TODAY'S SUMMARY counts DELIVERED orders only — placed/cancelled
   // never count. (The old code summed sales/fees over ALL of today's
@@ -2295,14 +2334,16 @@ function renderAdmin() {
   const dUnits = del.reduce((a, o) => a + (o.items || []).reduce((x, i) => x + (i.qty || 0), 0), 0);
   const sales = del.reduce((a, o) => a + o.subtotal, 0), fees = del.reduce((a, o) => a + o.fee, 0);
   const dDue = riderDue(del), dTen = dDue.deliveryDue, dDeposit = dDue.total;
-  const riders = users().filter(u => u.role === "rider");
+  const riders = adminVisibleUsers(users().filter(u => u.role === "rider")); // v35: demo riders hidden from settlement + Riders table
   const verifs = ls("bazar_verifications", []);
   const settlements = ls("bazar_settlements", []);
   const payouts = ls("bazar_payouts", []);
   el.innerHTML = `
-  <div style="display:flex;gap:8px;margin-bottom:12px">
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
     <button class="btn" onclick="setAdminTab('orders')">📦 অর্ডার</button>
-    <button class="btn ghost" onclick="setAdminTab('customers')">👥 কাস্টমার</button></div>
+    <button class="btn ghost" onclick="setAdminTab('customers')">👥 কাস্টমার</button>
+    ${adminDemoToggleHTML()}</div>
+  ${adminShowDemo() ? `<p class="muted" style="color:#b45309">⚠️ ডেমো/টেস্ট ডেটা দেখানো হচ্ছে — ডেমো কাস্টমার/রাইডারের অর্ডারও এই প্যানেলে দেখাচ্ছে।</p>` : `<p class="muted">ডেমো/টেস্ট অ্যাকাউন্টের অর্ডার এই প্যানেলে দেখানো হয় না।</p>`}
   <div class="statgrid">
     <div class="stat"><b>${todays.length}</b>Orders today</div>
     <div class="stat"><b>${todays.filter(o => o.status === "delivered").length}</b>Delivered today</div>
@@ -2335,7 +2376,9 @@ function renderAdmin() {
   <p class="muted">Approve = rider stays active tomorrow. Not Approved = rider goes OFF/banned until you re-activate after WhatsApp payment.</p>
   <button class="btn small" onclick="buildSettlement()">Generate Tonight's Checklist</button>
   ${riders.map(r => {
-    const d = orders().filter(o => o.rider === r.name && o.status === "delivered" && o.date === t);
+    // v35: demo-customer orders never count in a rider's admin numbers,
+    // even when a real rider delivered them.
+    const d = adminVisibleOrders(orders()).filter(o => o.rider === r.name && o.status === "delivered" && o.date === t);
     const earn = ordersFeeSum(d); // due shown from riderDue(d) in the row below
     const pay = payouts.find(p => p.rider === r.name && p.date === t) || {};
     const st = settlements.find(x => x.rider === r.name && x.date === t);
@@ -2345,7 +2388,7 @@ function renderAdmin() {
     <button class="btn small gold" onclick="reactivateRider('${esc(r.phone)}')">Re-activate / ON</button></div>`;
   }).join("")}
   <h3>Riders</h3>
-  <table><tr><th>Name</th><th>Phone</th><th>এলাকা</th><th>Verified</th><th>Online</th><th>Status</th></tr>${mergeAdminRiders(riders).map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.phone)}</td><td>${esc((r.areas || []).join(", ") || "—")}</td><td>${r.verified ? "Yes" : r.vstatus}</td><td>${r.online ? "Online" : "Offline"}</td><td>${r.banned ? "OFF" : "Active"}</td></tr>`).join("")}</table>
+  <table><tr><th>Name</th><th>Phone</th><th>এলাকা</th><th>Verified</th><th>Online</th><th>Status</th></tr>${adminVisibleUsers(mergeAdminRiders(riders)).map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.phone)}</td><td>${esc((r.areas || []).join(", ") || "—")}</td><td>${r.verified ? "Yes" : r.vstatus}</td><td>${r.online ? "Online" : "Offline"}</td><td>${r.banned ? "OFF" : "Active"}</td></tr>`).join("")}</table>
   <h3>Settings</h3><p>Owner bKash (riders send 10% here): <b>${BKASH}</b> • Delivery fee: ${fmt(DELIVERY_FEE)} (৫ কেজি পর্যন্ত) + ৳৫ প্রতি অতিরিক্ত কেজি • Areas: ${window.BAZARKORI_AREAS.join(", ")}</p>
   <p class="muted">Admin account is one-time only. No one can register a second admin from this app.</p>`;
 }
@@ -2404,8 +2447,11 @@ function adminVerificationHTML(localVerifs, riders) {
     if (seen.has(r.phone)) return; seen.add(r.phone);
     rows.push({ v: { rider: r.nid_name, nidName: r.nid_name, nid: r.nid_number, phone: r.phone, status: r.status, photo: r.photo_url, front: r.nid_front_url, back: r.nid_back_url }, localIdx: null, sbId: r.id });
   });
-  if (!rows.length) return "<p>No verification requests.</p>";
-  return rows.map(({ v, localIdx, sbId }) => {
+  // v35: demo/test riders' verifications never appear in admin
+  // (toggle ON shows them again).
+  const visibleRows = adminShowDemo() ? rows : rows.filter(({ v }) => !isDemoPhone(v.phone));
+  if (!visibleRows.length) return "<p>No verification requests.</p>";
+  return visibleRows.map(({ v, localIdx, sbId }) => {
     const r = (riders || []).find(u => u.phone === v.phone);
     const sbR = (adminRidersSb || []).find(u => u.phone === v.phone);
     const areas = (r && r.areas && r.areas.length) ? r.areas.join(", ") : (sbR && sbR.area) ? sbR.area : (r ? (r.area || "—") : "—");
@@ -2437,7 +2483,8 @@ function buildSettlement() {
   const t = todayStr(); const ss = ls("bazar_settlements", []);
   users().filter(u => u.role === "rider").forEach(r => {
     if (ss.some(x => x.rider === r.name && x.date === t)) return;
-    const d = orders().filter(o => o.rider === r.name && o.status === "delivered" && o.date === t);
+    // v35: demo-customer orders never count in a rider's settlement.
+    const d = adminVisibleOrders(orders()).filter(o => o.rider === r.name && o.status === "delivered" && o.date === t);
     ss.push({ rider: r.name, date: t, orders: d.length, earnings: ordersFeeSum(d), due: riderDue(d).total, status: "pending" });
   });
   save("bazar_settlements", ss); renderAll(); toast("Tonight's settlement checklist generated.");
@@ -2446,7 +2493,8 @@ function settleRider(phone, status) {
   const t = todayStr(); const ss = ls("bazar_settlements", []);
   const r = users().find(u => u.phone === phone); if (!r) return;
   let row = ss.find(x => x.rider === r.name && x.date === t);
-  const d = orders().filter(o => o.rider === r.name && o.status === "delivered" && o.date === t);
+  // v35: demo-customer orders never count in a rider's settlement.
+  const d = adminVisibleOrders(orders()).filter(o => o.rider === r.name && o.status === "delivered" && o.date === t);
   if (!row) { row = { rider: r.name, date: t, orders: d.length, earnings: ordersFeeSum(d), due: riderDue(d).total, status }; ss.push(row); }
   else row.status = status;
   save("bazar_settlements", ss);
