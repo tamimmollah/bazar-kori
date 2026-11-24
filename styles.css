@@ -206,8 +206,6 @@ footer{padding:28px 20px;text-align:center;color:var(--muted);font-size:15px;lin
 .mainnav{position:sticky;top:0;z-index:19;background:#fff;border-bottom:1px solid var(--line);display:flex;gap:4px;align-items:center;padding:8px 16px;flex-wrap:wrap}
 .mainnav button{background:none;border:0;padding:10px 14px;font-size:15px;font-weight:700;color:var(--ink);border-radius:10px;transition:background .2s var(--ease),color .2s var(--ease)}
 .mainnav button:hover{background:var(--green-soft);color:var(--green-deep)}
-.flash-badge{margin-left:auto;background:linear-gradient(180deg,var(--marigold2),var(--marigold));color:#2a1f00;font-weight:900;font-size:14px;border-radius:999px;padding:9px 16px;cursor:pointer;box-shadow:0 2px 8px rgba(240,168,50,.4);transition:transform .2s var(--ease)}
-.flash-badge:hover{transform:translateY(-1px)}
 
 /* Hero: two columns on cream, like FreshMart — text left, basket right */
 .hero-fm{background:linear-gradient(120deg,#f4f8f0 0%,#fdf8ec 55%,#f4f8f0 100%);color:var(--ink);min-height:0;display:grid;grid-template-columns:1.05fr .95fr;gap:24px;align-items:center;padding:36px 34px;margin-bottom:20px}
@@ -257,12 +255,7 @@ footer{padding:28px 20px;text-align:center;color:var(--muted);font-size:15px;lin
 .promo-text h3 span{color:var(--marigold2)}
 .promo-delivery .promo-text h3 span{color:var(--green2)}
 .promo-text p{margin:0 0 14px;font-size:15px;font-weight:600;opacity:.92}
-.promo-disc{position:absolute;top:18px;right:18px;z-index:2;width:92px;height:92px;border-radius:50%;background:linear-gradient(180deg,var(--marigold2),var(--marigold));color:#2a1f00;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:900;font-size:19px;line-height:1.1;box-shadow:0 6px 18px rgba(0,0,0,.25);border:3px solid #fff}
-
-/* Deal cards: discount badge + struck original price */
-.deal{position:relative}
-.deal-badge{position:absolute;top:10px;left:10px;z-index:2;background:var(--green-deep);color:#fff;font-size:13px;font-weight:800;border-radius:8px;padding:5px 9px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.old-price{font-size:14px;font-weight:700;color:var(--muted);text-decoration:line-through;margin-left:4px}
+/* Popular-product cards (v16): real MRP only */
 .deals-grid{margin-bottom:8px}
 
 /* Why choose us: 5 reason tiles */
@@ -328,7 +321,6 @@ footer{display:block;padding:0;text-align:left;background:var(--green-deep);colo
 .mainnav a.nav-link{background:none;border:0;padding:10px 14px;font-size:15px;font-weight:700;color:var(--ink);border-radius:10px;text-decoration:none;transition:background .2s var(--ease),color .2s var(--ease)}
 .mainnav a.nav-link:hover{background:var(--green-soft);color:var(--green-deep)}
 .mainnav a.nav-link.active{background:var(--green-soft);color:var(--green-deep);box-shadow:inset 0 -3px 0 var(--green2)}
-.mainnav a.flash-badge{text-decoration:none}
 /* Page intro banner (used on every inner page) */
 .page-hero{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;margin-bottom:18px;box-shadow:var(--shadow-soft)}
 .page-hero h1{margin:0 0 6px;font-size:28px;font-weight:900;color:var(--green-deep)}

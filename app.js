@@ -65,10 +65,9 @@ function shellHTML() {
 <nav class="mainnav">
   <a class="nav-link${active("index.html")}" href="index.html">🏠 Home</a>
   <a class="nav-link${active("categories.html")}" href="categories.html">Categories</a>
-  <a class="nav-link${active("deals.html")}" href="deals.html">Deals</a>
+  <a class="nav-link${active("deals.html")}" href="deals.html">জনপ্রিয় পণ্য</a>
   <a class="nav-link${active("about.html")}" href="about.html">About Us</a>
   <a class="nav-link${active("contact.html")}" href="contact.html">Contact Us</a>
-  <a class="flash-badge" href="deals.html">⚡ FLASH DEALS</a>
 </nav>
 <div id="demoBanner" class="panel" style="max-width:1200px;margin:12px auto 0;background:#fff7d6;border-color:#f5a623">
   <b>Demo / Local mode:</b> Supabase is not configured yet (placeholder in <code>supabase-config.js</code>).
@@ -89,7 +88,7 @@ function footerHTML() {
       <b>Quick Links</b>
       <a href="index.html">Home</a>
       <a href="categories.html">Categories</a>
-      <a href="deals.html">Deals</a>
+      <a href="deals.html">জনপ্রিয় পণ্য</a>
       <a href="about.html">About Us</a>
       <a href="contact.html">Contact Us</a>
     </div>
@@ -511,9 +510,8 @@ function renderProducts() {
     <div class="unit">${esc(p.unit)} • ${esc(p.category)}</div>
     <div class="row"><span class="price">${fmt(p.price)}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`).join("") || "<p>No products found.</p>";
 }
-// ---------- Deal of the Day (v14) — 10% off badge on selected popular items.
-// The struck "original" price is computed honestly as round(price / 0.9);
-// the price the customer actually pays is always the catalog price.
+// ---------- Popular products (v16): every price is the real MRP.
+// "আজকের জনপ্রিয় পণ্য" — the 6 most-bought products at their actual MRP.
 // ---------- Featured strip under the hero (v13) ----------
 const FEATURED = [["Radhuni Sunflower Oil", "1 L"], ["Coca-Cola Coke", "1 L"], ["Speed Can", "250 ml"], ["Pran Premium Ghee", "200 gm"], ["Lucky Strike Cool Crunch", "1 pack"]];
 const DEALS = [...FEATURED, ["Fresh Rice Bran Oil", "2 L"]];
@@ -521,17 +519,15 @@ function renderDeals() {
   const el = $("#deals"); if (!el) return;
   el.innerHTML = DEALS.map(([n, u]) => {
     const p = window.BAZARKORI_PRODUCTS.find(x => x.name === n && x.unit === u); if (!p) return "";
-    const orig = Math.round(p.price / 0.9);
-    return `<div class="card deal" onclick="openProduct(${p.id})">
-      <span class="deal-badge">১০% ছাড়</span>
+    return `<div class="card" onclick="openProduct(${p.id})">
       <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
       <div class="pad"><h3>${esc(p.name)}</h3><div class="unit">${esc(p.unit)}</div>
-      <div class="row"><span class="price">${fmt(p.price)} <s class="old-price">${fmt(orig)}</s></span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`;
+      <div class="row"><span class="price">${fmt(p.price)}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`;
   }).join("");
 }
 function renderFeatured() {
-  // v13 featured strip is now the "আজকের ডিল" section; kept as an alias so
-  // any older caller still works.
+  // v13 featured strip is now the "আজকের জনপ্রিয় পণ্য" section; kept as an
+  // alias so any older caller still works.
   renderDeals();
 }
 function openProduct(id) {
