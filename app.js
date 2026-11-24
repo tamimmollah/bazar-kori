@@ -75,6 +75,13 @@ function normalisePhone(raw) {
   return p;
 }
 function isValidPhone(raw) { return normalisePhone(raw) !== ""; }
+// EMAIL (v30): registration now requires a real email address — the
+// 6-digit verification code goes to this email. One account per email,
+// like the one-account-per-phone rule.
+const EMAIL_ERR = "সঠিক ইমেইল ঠিকানা দিন — যেমন: name@gmail.com";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+function normaliseEmail(raw) { return String(raw || "").trim().toLowerCase(); }
+function isValidEmail(raw) { return EMAIL_RE.test(String(raw || "").trim()); }
 // ADDRESS: a real, usable delivery address inside the delivery area —
 // minimum 12 characters, at least one digit (house/road/flat number) AND
 // letters, and must name one of the 8 delivery areas (Bangla or English).
@@ -236,6 +243,9 @@ function mountShell() {
   // Fill the customer terms on login.html's register form (if present).
   const rt = document.getElementById("rpTerms");
   if (rt) rt.innerHTML = CUSTOMER_TERMS_HTML;
+  // v30: a registration waiting for its email code survives a reload —
+  // restore the OTP step on the login page instead of the empty form.
+  if (PAGE === "login.html") { try { if (getPendingReg()) showOtpStep("page"); } catch (e) {} }
   startTopbarTicker(); // v26: JS fallback drive when reduced-motion is on
 }
 
@@ -450,18 +460,24 @@ const CUSTOMER_TERMS_HTML = `<div class="terms-box">
     <li>💵 পেমেন্ট: Cash on Delivery — পণ্য হাতে পেয়ে তারপর টাকা দিন।</li>
     <li>🏷️ সব পণ্য MRP দামে — কোনো ডিসকাউন্ট বা লুকানো চার্জ নেই।</li>
     <li>🛎️ সার্ভিস চার্জ: প্রতি পণ্যে ৳৫ (MRP-র উপরে) — এই চার্জে আমরা অর্ডার, রাইডার আর ডেলিভারি সাজিয়ে দিই।</li>
+    <li>📧 রেজিস্ট্রেশনের সময় আপনার ইমেইলে ৬ সংখ্যার ভেরিফিকেশন কোড যাবে (bazarkori.shop.bd@gmail.com থেকে) — কোডটি বসালেই অ্যাকাউন্ট চালু হবে।</li>
     <li>📱 সঠিক মোবাইল নম্বর (১১ ডিজিট) আর বাড়ি/রোড নম্বরসহ পুরো ঠিকানা দিতে হবে — ভুল নম্বর/ঠিকানায় অর্ডার নেওয়া হবে না। রাইডার পণ্য কেনার আগে আপনাকে কল করে কনফার্ম করবে যে অর্ডারটা নিবেন কিনা।</li>
     <li>🕛 খোলা: রাত ১২টা পর্যন্ত।</li>
   </ul>
 </div>`;
-// Registration is customer-only: name, phone, password, address.
+// Registration is customer-only: name, phone, email, password, address.
 // No role choice, no admin registration. Riders register via the app.
+// v30: email is REQUIRED — a 6-digit code goes to the email and the
+// account opens only after the code is verified (Supabase email OTP).
 function openRegister() {
+  // If a registration is waiting for its code, show the OTP step instead.
+  if (getPendingReg()) { showOtpStep("modal"); return; }
   const b = $("#modalBody");
   b.innerHTML = `<img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>রেজিস্টার — কাস্টমার</h2>
   <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। রাইডাররা অ্যাপ ব্যবহার করুন।</p>
   <label>নাম</label><input id="rName" placeholder="আপনার নাম">
   <label>ফোন নম্বর</label><input id="rPhone" placeholder="01XXXXXXXXX">
+  <label>ইমেইল</label><input id="rEmail" type="email" placeholder="name@gmail.com">
   <label>পাসওয়ার্ড</label><input id="rPass" type="password" placeholder="পাসওয়ার্ড">
   <label>ঠিকানা</label><input id="rAddr" placeholder="বাসা, রোড, এলাকা">
   <label>এলাকা</label><select id="rArea">${window.BAZARKORI_AREAS.map(a => `<option>${a}</option>`).join("")}</select>
@@ -469,6 +485,139 @@ function openRegister() {
   <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="rAgree" style="width:auto;margin-top:4px"> <span>হ্যাঁ, আমি উপরের সব শর্তে রাজি</span></label>
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="doRegister()">রেজিস্টার করুন</button><button class="btn ghost" onclick="openAuth()">লগইন করুন</button></div>`;
   $("#modal").classList.add("open");
+}
+// ---------- Email OTP verification (v30) ----------
+// Registration is two steps: (1) the form collects name/phone/email/
+// password/address and Supabase sends a 6-digit code to the EMAIL;
+// (2) the customer types the code and the account is created ONLY then.
+// The code is verified server-side by Supabase Auth — nothing about the
+// code ever lives in this file. The pending form data survives a reload
+// (sessionStorage) so the OTP step comes back instead of the form.
+// NOTE: this works live ONLY after Supabase Dashboard has custom SMTP +
+// the OTP-code email template enabled (built-in sender: 2/hour, team-only).
+const PENDING_REG_KEY = "bazar_pending_reg";
+let pendingReg = null;
+function getPendingReg() {
+  if (pendingReg && pendingReg.email) return pendingReg;
+  try {
+    const v = JSON.parse(sessionStorage.getItem(PENDING_REG_KEY));
+    if (v && v.email && v.phone) { pendingReg = v; return v; }
+  } catch {}
+  return null;
+}
+function setPendingReg(p) {
+  pendingReg = p || null;
+  try { if (p) sessionStorage.setItem(PENDING_REG_KEY, JSON.stringify(p)); else sessionStorage.removeItem(PENDING_REG_KEY); } catch {}
+}
+function otpErrorToast(err) {
+  const m = ((err && (err.message || "")) + " " + ((err && err.code) || "")).toLowerCase();
+  if (m.includes("rate_limit") || m.includes("too many") || m.includes("rate limit"))
+    return toast("অনেকবার চেষ্টা করেছেন — কিছুক্ষণ পরে আবার চেষ্টা করুন।");
+  // Supabase's verify error for a WRONG code is "Token has expired or is
+  // invalid" — a wrong code is far more common than an expired one, and
+  // the fix is the same (retype, or resend), so show the wrong-code text.
+  if (m.includes("expired or is invalid") || m.includes("invalid"))
+    return toast("ভুল কোড — আবার চেষ্টা করুন।");
+  if (m.includes("expir")) return toast("কোডের মেয়াদ শেষ — নতুন কোড পাঠান।");
+  if (m.includes("otp") || m.includes("token")) return toast("ভুল কোড — আবার চেষ্টা করুন।");
+  return toast("কোড পাঠানো যায়নি — আবার চেষ্টা করুন।");
+}
+async function sendOtpCode(p) {
+  // Returns true when Supabase accepted the send. The 60s cooldown below
+  // mirrors Supabase's own per-user resend window.
+  const { error } = await sb.auth.signInWithOtp({ email: p.email, options: { shouldCreateUser: true } });
+  if (error) { otpErrorToast(error); return false; }
+  p.sentAt = Date.now();
+  setPendingReg(p);
+  startOtpCooldown();
+  return true;
+}
+let otpCooldownUntil = 0, otpCooldownTimer = null;
+function otpCooldownLeft() {
+  // After a reload the in-memory timer is gone, but pendingReg.sentAt
+  // survives in sessionStorage — derive the remaining cooldown from it.
+  let until = otpCooldownUntil;
+  const p = pendingReg || getPendingReg();
+  if (p && p.sentAt) until = Math.max(until, p.sentAt + 60000);
+  return Math.max(0, Math.ceil((until - Date.now()) / 1000));
+}
+function tickOtpCooldown() {
+  if (otpCooldownTimer) return;
+  otpCooldownTimer = setInterval(() => {
+    const left = otpCooldownLeft();
+    const btn = $("#otpResend");
+    if (btn) {
+      btn.disabled = left > 0;
+      btn.textContent = left > 0 ? `কোড আবার পাঠান (${left} সেকেন্ড)` : "কোড আবার পাঠান";
+    }
+    if (left <= 0 && otpCooldownTimer) { clearInterval(otpCooldownTimer); otpCooldownTimer = null; }
+  }, 500);
+}
+function startOtpCooldown() {
+  otpCooldownUntil = Date.now() + 60000;
+  tickOtpCooldown();
+  const btn = $("#otpResend");
+  if (btn) { btn.disabled = true; btn.textContent = "কোড আবার পাঠান (৬০ সেকেন্ড)"; }
+}
+function otpStepHTML(p) {
+  const left = otpCooldownLeft();
+  return `<img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>📧 ইমেইল ভেরিফাই করুন</h2>
+  <p class="muted">৬ সংখ্যার কোডটি <b>${esc(p.email)}</b> ঠিকানায় পাঠানো হয়েছে। ইনবক্স (আর স্প্যাম ফোল্ডারটাও) দেখে কোডটি এখানে বসান।</p>
+  <label>ভেরিফিকেশন কোড</label><input id="otpCode" inputmode="numeric" maxlength="6" placeholder="৬ সংখ্যার কোড" style="letter-spacing:4px;font-size:18px">
+  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="verifyOtpCode()">ভেরিফাই করুন</button></div>
+  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" id="otpResend" onclick="resendOtp()" ${left > 0 ? "disabled" : ""}>${left > 0 ? `কোড আবার পাঠান (${left} সেকেন্ড)` : "কোড আবার পাঠান"}</button><button class="btn ghost" onclick="cancelOtp()">ইমেইল বদলান</button></div>`;
+}
+function showOtpStep(where) {
+  const p = getPendingReg(); if (!p) return;
+  if (where === "page") {
+    const f = $("#regForm"), o = $("#regOtp");
+    if (f && o) { f.classList.add("hidden"); o.innerHTML = otpStepHTML(p); o.classList.remove("hidden"); }
+  } else {
+    const b = $("#modalBody");
+    if (!b) return;
+    b.innerHTML = otpStepHTML(p);
+    $("#modal").classList.add("open");
+  }
+  if (otpCooldownLeft() > 0) tickOtpCooldown(); // keep the countdown ticking
+}
+async function resendOtp() {
+  const p = getPendingReg(); if (!p) return;
+  if (otpCooldownLeft() > 0) return;
+  if (!LIVE || !sb) return toast("ইমেইল ভেরিফিকেশন এখনো চালু হয়নি — কিছুক্ষণ পরে আবার চেষ্টা করুন।");
+  if (await sendOtpCode(p)) toast("নতুন কোড পাঠানো হয়েছে।");
+}
+function cancelOtp() {
+  // Back to the register form with a different email. The pending data is
+  // dropped — the customer fills the form again.
+  setPendingReg(null);
+  if (PAGE === "login.html") {
+    const f = $("#regForm"), o = $("#regOtp");
+    if (f && o) { o.classList.add("hidden"); o.innerHTML = ""; f.classList.remove("hidden"); }
+    return;
+  }
+  openRegister();
+}
+async function verifyOtpCode() {
+  const p = getPendingReg();
+  if (!p) return toast("আগে রেজিস্টার ফর্মটি পূরণ করুন।");
+  const codeEl = $("#otpCode");
+  const code = codeEl ? codeEl.value.trim() : "";
+  if (!/^\d{6}$/.test(code)) return toast("৬ সংখ্যার কোডটি দিন।");
+  if (!LIVE || !sb) return toast("ইমেইল ভেরিফিকেশন এখনো চালু হয়নি — কিছুক্ষণ পরে আবার চেষ্টা করুন।");
+  const { error } = await sb.auth.verifyOtp({ email: p.email, token: code, type: "email" });
+  if (error) { otpErrorToast(error); return; }
+  finishRegistration(p);
+}
+function finishRegistration(p) {
+  // The code verified — NOW the account is created, exactly like the old
+  // instant registerWith did (same fields + email + emailVerified).
+  const u = { phone: p.phone, name: p.name, role: "customer", pass: p.pass, email: p.email, emailVerified: true, area: p.area || window.BAZARKORI_AREAS[0], address: p.addr, verified: true, vstatus: "verified", online: false, banned: false };
+  const all = users(); all.push(u); setUsers(all);
+  insertProfileToSupabase(u); // real Supabase row, not just localStorage
+  setPendingReg(null);
+  save("bazar_session", u); closeModal(); renderAll();
+  if (PAGE === "login.html") { location.href = "index.html"; return; }
+  toast("রেজিস্টার হয়েছে! বাজার করি-তে স্বাগতম।");
 }
 // One unified login (phone + password). Used by the modal AND the login page.
 // v25: the phone is validated + normalised first (01710000002 and
@@ -496,23 +645,33 @@ function loginWith(phone, pass) {
 }
 function doLogin() { const p = $("#aPhone"), w = $("#aPass"); if (p && w) loginWith(p.value.trim(), w.value); }
 function loginFromPage() { const p = $("#lpPhone"), w = $("#lpPass"); if (p && w) loginWith(p.value.trim(), w.value); }
-function registerWith(name, phone, pass, addr, area) {
-  if (!name || !phone || !pass || !addr) return toast("নাম, ফোন, পাসওয়ার্ড ও ঠিকানা — সবগুলো দিন।");
+async function registerWith(name, phone, pass, addr, area, email) {
+  if (!name || !phone || !email || !pass || !addr) return toast("নাম, ফোন, ইমেইল, পাসওয়ার্ড ও ঠিকানা — সবগুলো দিন।");
   // v25: valid phone + valid address are REQUIRED to create an account.
   phone = normalisePhone(phone);
   if (!phone) return toast(PHONE_ERR);
+  // v30: a real email is REQUIRED — the verification code goes there.
+  email = normaliseEmail(email);
+  if (!isValidEmail(email)) return toast(EMAIL_ERR);
   const av = validateAddress(addr);
   if (!av.ok) return toast(av.error);
   if (users().some(x => x.phone === phone)) return toast("এই ফোন নম্বরটি ইতিমধ্যে রেজিস্টার করা আছে। লগইন করুন।");
-  const u = { phone, name, role: "customer", pass, area: area || window.BAZARKORI_AREAS[0], address: addr, verified: true, vstatus: "verified", online: false, banned: false };
-  const all = users(); all.push(u); setUsers(all);
-  insertProfileToSupabase(u); // real Supabase row, not just localStorage
-  save("bazar_session", u); closeModal(); renderAll();
-  if (PAGE === "login.html") { location.href = "index.html"; return; }
-  toast("রেজিস্টার হয়েছে! বাজার করি-তে স্বাগতম।");
+  if (users().some(x => (x.email || "").toLowerCase() === email)) return toast("এই ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট আছে। লগইন করুন।");
+  // v30: NO instant registration anymore — the account is created only
+  // after the 6-digit email code verifies (finishRegistration). Without
+  // Supabase live (SMTP + OTP template not configured yet), stop here.
+  if (!LIVE || !sb) return toast("ইমেইল ভেরিফিকেশন এখনো চালু হয়নি — কিছুক্ষণ পরে আবার চেষ্টা করুন।");
+  const p = { name, phone, pass, addr, area: area || window.BAZARKORI_AREAS[0], email };
+  setPendingReg(p);
+  if (await sendOtpCode(p)) {
+    showOtpStep(PAGE === "login.html" ? "page" : "modal");
+    toast("ভেরিফিকেশন কোড আপনার ইমেইলে পাঠানো হয়েছে।");
+  } else {
+    setPendingReg(null);
+  }
 }
-function doRegister() { const n = $("#rName"), p = $("#rPhone"), w = $("#rPass"), a = $("#rAddr"), ar = $("#rArea"); if (!$("#rAgree") || !$("#rAgree").checked) return toast("অনুগ্রহ করে শর্তাবলিতে রাজি হয়ে টিক দিন।"); if (n && p && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : ""); }
-function registerFromPage() { const n = $("#rpName"), p = $("#rpPhone"), w = $("#rpPass"), a = $("#rpAddr"), ar = $("#rpArea"); if (!$("#rpAgree") || !$("#rpAgree").checked) return toast("অনুগ্রহ করে শর্তাবলিতে রাজি হয়ে টিক দিন।"); if (n && p && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : ""); }
+function doRegister() { const n = $("#rName"), p = $("#rPhone"), e = $("#rEmail"), w = $("#rPass"), a = $("#rAddr"), ar = $("#rArea"); if (!$("#rAgree") || !$("#rAgree").checked) return toast("অনুগ্রহ করে শর্তাবলিতে রাজি হয়ে টিক দিন।"); if (n && p && e && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : "", e.value.trim()); }
+function registerFromPage() { const n = $("#rpName"), p = $("#rpPhone"), e = $("#rpEmail"), w = $("#rpPass"), a = $("#rpAddr"), ar = $("#rpArea"); if (!$("#rpAgree") || !$("#rpAgree").checked) return toast("অনুগ্রহ করে শর্তাবলিতে রাজি হয়ে টিক দিন।"); if (n && p && e && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : "", e.value.trim()); }
 function insertProfileToSupabase(u) {
   // Upsert by phone (unique): creates the row, or refreshes it if it exists.
   if (!LIVE || !sb) return;
