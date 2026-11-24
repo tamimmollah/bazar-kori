@@ -322,3 +322,39 @@ footer{display:block;padding:0;text-align:left;background:var(--green-deep);colo
   .hero-badge{width:96px;height:96px}
   .hero-badge b{font-size:18px}
 }
+
+/* ================= বাজার করি v15 — multi-page ================= */
+/* Nav links (same look as the old nav buttons) + active page highlight */
+.mainnav a.nav-link{background:none;border:0;padding:10px 14px;font-size:15px;font-weight:700;color:var(--ink);border-radius:10px;text-decoration:none;transition:background .2s var(--ease),color .2s var(--ease)}
+.mainnav a.nav-link:hover{background:var(--green-soft);color:var(--green-deep)}
+.mainnav a.nav-link.active{background:var(--green-soft);color:var(--green-deep);box-shadow:inset 0 -3px 0 var(--green2)}
+.mainnav a.flash-badge{text-decoration:none}
+/* Page intro banner (used on every inner page) */
+.page-hero{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;margin-bottom:18px;box-shadow:var(--shadow-soft)}
+.page-hero h1{margin:0 0 6px;font-size:28px;font-weight:900;color:var(--green-deep)}
+.page-hero p{margin:0;color:var(--muted);font-weight:600;font-size:16px}
+/* Categories toolbar: search + category + sort */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.toolbar .search{flex:2}
+.toolbar select{flex:1;min-width:180px;width:auto;margin:0}
+/* Product detail page */
+.detail{display:grid;grid-template-columns:1fr 1fr;gap:24px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-soft);margin-bottom:18px}
+.detail-img img{width:100%;max-height:420px;object-fit:contain;background:#fff;border-radius:14px;display:block}
+.detail-info h1{margin:0 0 8px;font-size:28px;font-weight:900;color:var(--green-deep);line-height:1.3}
+.detail-unit{font-size:16px;color:var(--muted);font-weight:600}
+.detail-price{font-size:32px;font-weight:900;color:var(--green-deep);margin:10px 0}
+.qty-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+.qty-btn{width:48px;height:48px;border-radius:12px;border:1px solid var(--line);background:#fff;font-size:22px;font-weight:800;cursor:pointer}
+.qty-btn:hover{border-color:var(--green2)}
+#detailQty{font-size:20px;font-weight:800;min-width:28px;text-align:center}
+/* Login page: two panels side by side */
+.login-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;margin:0 auto}
+/* Contact page cards + area chips */
+.contact-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.contact-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-soft)}
+.contact-card b{display:block;font-size:18px;color:var(--green-deep);margin-bottom:6px}
+.contact-card p{margin:0;font-size:16px;font-weight:600;color:var(--muted)}
+.area-chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.area-chips span{background:var(--green-soft);color:var(--green-deep);border-radius:999px;padding:8px 16px;font-weight:700;font-size:15px}
+@media(max-width:900px){.detail{grid-template-columns:1fr}.login-grid{grid-template-columns:1fr}.contact-cards{grid-template-columns:1fr}}
+@media(max-width:640px){.page-hero h1{font-size:24px}.detail-info h1{font-size:24px}.detail-price{font-size:28px}.toolbar select{min-width:140px}}

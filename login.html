@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>লগইন / রেজিস্টার — বাজার করি</title>
+<meta name="description" content="বাজার করি-তে লগইন করুন বা নতুন কাস্টমার অ্যাকাউন্ট বানান। শুধু ফোন নম্বর আর পাসওয়ার্ড লাগবে।">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="products.js"></script>
+</head>
+<body>
+<div id="shellHeader"></div>
+<main>
+  <div class="page-hero">
+    <h1>👤 লগইন / রেজিস্টার</h1>
+    <p>ফোন নম্বর আর পাসওয়ার্ড দিয়েই হবে — কোনো ইমেইল লাগবে না।</p>
+  </div>
+  <div class="login-grid">
+    <div class="panel">
+      <img class="sheet-logo" src="logo.png" alt="বাজার করি">
+      <h2>লগইন</h2>
+      <p class="muted">ফোন নম্বর ও পাসওয়ার্ড দিয়ে লগইন করুন।</p>
+      <label>ফোন নম্বর</label><input id="lpPhone" placeholder="01XXXXXXXXX">
+      <label>পাসওয়ার্ড</label><input id="lpPass" type="password" placeholder="পাসওয়ার্ড">
+      <button class="btn gold" style="width:100%;margin-top:10px" onclick="loginFromPage()">লগইন</button>
+      <p class="muted">অ্যাকাউন্ট নেই? পাশে রেজিস্টার করুন।</p>
+    </div>
+    <div class="panel">
+      <h2>রেজিস্টার — কাস্টমার</h2>
+      <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। রাইডাররা অ্যাপ ব্যবহার করুন।</p>
+      <label>নাম</label><input id="rpName" placeholder="আপনার নাম">
+      <label>ফোন নম্বর</label><input id="rpPhone" placeholder="01XXXXXXXXX">
+      <label>পাসওয়ার্ড</label><input id="rpPass" type="password" placeholder="পাসওয়ার্ড">
+      <label>ঠিকানা</label><input id="rpAddr" placeholder="বাসা, রোড, এলাকা">
+      <label>এলাকা</label><select id="rpArea"></select>
+      <button class="btn gold" style="width:100%;margin-top:10px" onclick="registerFromPage()">রেজিস্টার করুন</button>
+    </div>
+  </div>
+  <div class="panel" id="loginInfo" style="max-width:900px;margin:16px auto 0"></div>
+</main>
+<div id="shellFooter"></div>
+<script src="app.js"></script>
+</body>
+</html>

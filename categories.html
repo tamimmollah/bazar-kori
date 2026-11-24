@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>সব পণ্য — বাজার করি | Demra Thana Delivery</title>
+<meta name="description" content="বাজার করি-র সব ২৩২টি পণ্য — ক্যাটাগরি, খোঁজা আর দাম দিয়ে সাজিয়ে দেখুন। ২৫ মিনিটে ডেলিভারি, ফ্ল্যাট ৳৩০, Cash on Delivery।">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="products.js"></script>
+</head>
+<body>
+<div id="shellHeader"></div>
+<main>
+  <div class="page-hero">
+    <h1>🛒 সব পণ্য</h1>
+    <p>২৩২টি পণ্য — ক্যাটাগরি বেছে নিন, খুঁজুন, দাম দিয়ে সাজান। পণ্যে ক্লিক করলে বিস্তারিত দেখতে পাবেন।</p>
+  </div>
+  <div class="toolbar">
+    <input class="search" id="search" placeholder="পণ্য খুঁজুন… যেমন: তেল, কোক, চিনি" oninput="renderProducts()">
+    <select id="catSelect" onchange="setCat(this.value)" aria-label="ক্যাটাগরি বেছে নিন"></select>
+    <select id="sortSelect" onchange="renderProducts()" aria-label="সাজান">
+      <option value="">সাজান: ডিফল্ট</option>
+      <option value="low">দাম: কম থেকে বেশি</option>
+      <option value="high">দাম: বেশি থেকে কম</option>
+      <option value="name">নাম: A–Z</option>
+    </select>
+  </div>
+  <div class="cats" id="cats"></div>
+  <h2 id="catTitle">Our Recommendations</h2>
+  <div class="grid" id="grid"></div>
+</main>
+<div id="shellFooter"></div>
+<script src="app.js"></script>
+</body>
+</html>

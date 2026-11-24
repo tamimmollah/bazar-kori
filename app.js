@@ -9,6 +9,13 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const fmt = n => "৳" + Number(n || 0).toLocaleString("en-IN");
 
+// ---------- Multi-page (v15) ----------
+// One static site, one page per section — no more single endless page.
+// PAGE is the current file; QPARAMS reads ?cat=, ?q=, ?id=, ?track=, ?sort=.
+const PAGE = (location.pathname.split("/").pop() || "index.html").split("?")[0] || "index.html";
+const QPARAMS = new URLSearchParams(location.search || "");
+const qp = k => QPARAMS.get(k) || "";
+
 // ---------- Supabase ----------
 let sb = null, LIVE = false;
 function initSupabase() {
@@ -20,6 +27,108 @@ function initSupabase() {
   }
   const b = $("#demoBanner"); if (b) b.style.display = LIVE ? "none" : "block";
 }
+
+
+// ---------- Shared header / nav / footer (v15) ----------
+// Every page has <div id="shellHeader"></div> and <div id="shellFooter"></div>;
+// mountShell() fills them with the SAME header, nav and footer, so the site
+// looks like one organised shop instead of ten different pages. The login
+// modal, toast and WhatsApp float are also injected here so they exist on
+// every page.
+function shellHTML() {
+  const cats = ["All", ...window.BAZARKORI_CATEGORIES];
+  const active = (p) => PAGE === p ? " active" : "";
+  return `
+<div class="topbar">
+  <span>📍 Demra Thana + আশেপাশের এলাকা</span>
+  <span>🚚 ফ্ল্যাট ৳৩০ ডেলিভারি • 💵 COD</span>
+  <span>📞 <a href="tel:01865861015">01865-861015</a> • ⏰ খোলা: রাত ১২টা পর্যন্ত</span>
+</div>
+<header>
+  <a class="logo" href="index.html" style="text-decoration:none"><img class="logo-img" src="logo.png" alt="বাজার করি"><span class="logo-tag">তাজা। সস্তা। ২৫ মিনিটে।</span></a>
+  <div class="search-group">
+    <select id="hdrCatSelect" onchange="goCat(this.value)" aria-label="ক্যাটাগরি বেছে নিন">${cats.map(c => `<option value="${esc(c)}">${c === "All" ? "All Categories" : esc(c)}</option>`).join("")}</select>
+    <input class="search" id="hdrSearch" placeholder="তাজা ফল, সবজি, তেল, কোক… খুঁজুন" onkeydown="if(event.key==='Enter')goSearch()">
+    <button class="search-btn" onclick="goSearch()" aria-label="খুঁজুন">🔍</button>
+  </div>
+  <button class="btn ghost" id="loginBtn" onclick="location.href='login.html'">Login / Register</button>
+  <button class="btn gold" onclick="location.href='cart.html'">🛒 Cart <span id="cartCount">0</span> • ৳<span id="cartTotal">0</span></button>
+  <button class="btn" onclick="location.href='orders.html'">My Orders <span class="badge hidden" id="orderBadge">0</span></button>
+  <button class="btn ghost hidden" id="adminBtn" onclick="location.href='admin.html'">Admin</button>
+  <span id="whoami" class="muted"></span>
+  <button class="btn ghost hidden" id="logoutBtn" onclick="logout()">Logout</button>
+</header>
+<nav class="mainnav">
+  <a class="nav-link${active("index.html")}" href="index.html">🏠 Home</a>
+  <a class="nav-link${active("categories.html")}" href="categories.html">Categories</a>
+  <a class="nav-link${active("deals.html")}" href="deals.html">Deals</a>
+  <a class="nav-link${active("about.html")}" href="about.html">About Us</a>
+  <a class="nav-link${active("contact.html")}" href="contact.html">Contact Us</a>
+  <a class="flash-badge" href="deals.html">⚡ FLASH DEALS</a>
+</nav>
+<div id="demoBanner" class="panel" style="max-width:1200px;margin:12px auto 0;background:#fff7d6;border-color:#f5a623">
+  <b>Demo / Local mode:</b> Supabase is not configured yet (placeholder in <code>supabase-config.js</code>).
+  Orders, riders and admin data are stored in this browser only. Fill in your free Supabase URL + anon key to go live — see README.md.
+  <button class="btn small gold" onclick="requestNotify()">🔔 Enable browser notifications</button>
+</div>`;
+}
+function footerHTML() {
+  return `
+<footer>
+  <div class="footer-cols">
+    <div class="footer-col brand">
+      <img class="footer-logo" src="logo.png" alt="বাজার করি">
+      <b>বাজার করি</b>
+      <p>তাজা। সস্তা। ২৫ মিনিটে।<br>ডেমরার নিজের বাজার — তাজা বাজার, প্রতিদিন।</p>
+    </div>
+    <div class="footer-col">
+      <b>Quick Links</b>
+      <a href="index.html">Home</a>
+      <a href="categories.html">Categories</a>
+      <a href="deals.html">Deals</a>
+      <a href="about.html">About Us</a>
+      <a href="contact.html">Contact Us</a>
+    </div>
+    <div class="footer-col">
+      <b>Customer Service</b>
+      <a href="orders.html">My Orders</a>
+      <a href="orders.html">Order Tracking</a>
+      <a href="https://wa.me/8801865861015" target="_blank" rel="noopener">WhatsApp-এ সাহায্য নিন</a>
+      <a href="about.html">কেন বাজার করি?</a>
+    </div>
+    <div class="footer-col">
+      <b>Categories</b>
+      <span id="footerCats"></span>
+    </div>
+    <div class="footer-col">
+      <b>Contact Us</b>
+      <p>📍 Demra Thana, Dhaka<br>📞 <a href="tel:01865861015">01865-861015</a><br>💬 <a href="https://wa.me/8801865861015">WhatsApp</a><br>✉️ tamimmolla81@gmail.com<br>⏰ খোলা: রাত ১২টা পর্যন্ত</p>
+      <b>We Accept</b>
+      <p class="pay-badges"><span>COD</span><span>bKash</span></p>
+    </div>
+  </div>
+  <div class="footer-bottom">© 2026 বাজার করি — All Rights Reserved. • Riders buy with their own money and keep only the delivery charge. 10% of delivery earnings is due daily via bKash.</div>
+</footer>`;
+}
+function mountShell() {
+  const h = document.getElementById("shellHeader");
+  if (h) h.innerHTML = shellHTML();
+  const f = document.getElementById("shellFooter");
+  if (f) f.innerHTML = footerHTML();
+  if (!document.getElementById("modal")) {
+    document.body.insertAdjacentHTML("beforeend",
+      '<div class="modal" id="modal"><div class="sheet" id="modalBody"></div></div>' +
+      '<div class="toast" id="toast"></div>' +
+      '<a class="wa-float" href="https://wa.me/8801865861015?text=%E0%A6%86%E0%A6%B8%E0%A6%B8%E0%A6%BE%E0%A6%B2%E0%A6%BE%E0%A6%AE%E0%A7%81%20%E0%A6%86%E0%A6%B2%E0%A6%BE%E0%A6%87%E0%A6%95%E0%A7%81%E0%A6%AE%2C%20%E0%A6%AC%E0%A6%BE%E0%A6%9C%E0%A6%BE%E0%A6%B0%20%E0%A6%95%E0%A6%B0%E0%A6%BF%20%E0%A6%A5%E0%A7%87%E0%A6%95%E0%A7%87%20%E0%A6%B8%E0%A6%BE%E0%A6%B9%E0%A6%BE%E0%A6%AF%E0%A7%8D%E0%A6%AF%20%E0%A6%A6%E0%A6%B0%E0%A6%95%E0%A6%BE%E0%A6%B0%E0%A5%A4" target="_blank" rel="noopener" aria-label="WhatsApp-এ সাহায্য নিন"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>');
+  }
+  // Fill the register area dropdown on login.html (if present).
+  const ra = document.getElementById("rpArea");
+  if (ra) ra.innerHTML = window.BAZARKORI_AREAS.map(a => `<option>${a}</option>`).join("");
+}
+// Category tile / footer link → categories page, pre-filtered.
+function goCat(c) { location.href = "categories.html?cat=" + encodeURIComponent(c || "All"); }
+// Header search → categories page with the search text.
+function goSearch() { const v = ($("#hdrSearch") && $("#hdrSearch").value) || ""; location.href = "categories.html?q=" + encodeURIComponent(v.trim()); }
 
 // ---------- Seed data ----------
 function seed() {
@@ -155,29 +264,40 @@ function openRegister() {
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="doRegister()">রেজিস্টার করুন</button><button class="btn ghost" onclick="openAuth()">লগইন করুন</button></div>`;
   $("#modal").classList.add("open");
 }
-function doLogin() {
-  const phone = $("#aPhone").value.trim(), pass = $("#aPass").value;
+// One unified login (phone + password). Used by the modal AND the login page.
+function loginWith(phone, pass) {
   const u = users().find(x => x.phone === phone);
   if (!u || u.pass !== pass) return toast("ভুল ফোন নম্বর বা পাসওয়ার্ড।");
   if (u.role === "rider") {
     // Riders use the separate Android app — no rider panel on the website.
-    $("#modalBody").innerHTML = `<h2>রাইডাররা অ্যাপ ব্যবহার করুন</h2><p>রাইডার প্যানেল এখন শুধু Android অ্যাপে আছে। অনুগ্রহ করে বাজার করি রাইডার অ্যাপ থেকে লগইন করুন।</p><div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" onclick="closeModal()">ঠিক আছে</button></div>`;
+    const b = $("#modalBody");
+    if (b) {
+      b.innerHTML = `<h2>রাইডাররা অ্যাপ ব্যবহার করুন</h2><p>রাইডার প্যানেল এখন শুধু Android অ্যাপে আছে। অনুগ্রহ করে বাজার করি রাইডার অ্যাপ থেকে লগইন করুন।</p><div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" onclick="closeModal()">ঠিক আছে</button></div>`;
+      $("#modal").classList.add("open");
+    }
+    toast("রাইডাররা অ্যাপ ব্যবহার করুন");
     return;
   }
   if (u.banned) return toast("Your account is OFF / banned. Contact the owner on WhatsApp after payment.");
   save("bazar_session", u); closeModal(); renderAll();
+  if (PAGE === "login.html") { location.href = u.role === "admin" ? "admin.html" : "index.html"; return; }
   toast(u.role === "admin" ? "Welcome, owner." : "Logged in as " + u.name);
   if (u.role === "customer") { syncProfileToSupabase(u); maybeAskProfile(); }
 }
-function doRegister() {
-  const name = $("#rName").value.trim(), phone = $("#rPhone").value.trim(), pass = $("#rPass").value, addr = $("#rAddr").value.trim();
+function doLogin() { const p = $("#aPhone"), w = $("#aPass"); if (p && w) loginWith(p.value.trim(), w.value); }
+function loginFromPage() { const p = $("#lpPhone"), w = $("#lpPass"); if (p && w) loginWith(p.value.trim(), w.value); }
+function registerWith(name, phone, pass, addr, area) {
   if (!name || !phone || !pass || !addr) return toast("নাম, ফোন, পাসওয়ার্ড ও ঠিকানা — সবগুলো দিন।");
   if (users().some(x => x.phone === phone)) return toast("এই ফোন নম্বরটি ইতিমধ্যে রেজিস্টার করা আছে। লগইন করুন।");
-  const u = { phone, name, role: "customer", pass, area: $("#rArea").value, address: addr, verified: true, vstatus: "verified", online: false, banned: false };
+  const u = { phone, name, role: "customer", pass, area: area || window.BAZARKORI_AREAS[0], address: addr, verified: true, vstatus: "verified", online: false, banned: false };
   const all = users(); all.push(u); setUsers(all);
   insertProfileToSupabase(u); // real Supabase row, not just localStorage
-  save("bazar_session", u); closeModal(); renderAll(); toast("রেজিস্টার হয়েছে! বাজার করি-তে স্বাগতম।");
+  save("bazar_session", u); closeModal(); renderAll();
+  if (PAGE === "login.html") { location.href = "index.html"; return; }
+  toast("রেজিস্টার হয়েছে! বাজার করি-তে স্বাগতম।");
 }
+function doRegister() { const n = $("#rName"), p = $("#rPhone"), w = $("#rPass"), a = $("#rAddr"), ar = $("#rArea"); if (n && p && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : ""); }
+function registerFromPage() { const n = $("#rpName"), p = $("#rpPhone"), w = $("#rpPass"), a = $("#rpAddr"), ar = $("#rpArea"); if (n && p && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : ""); }
 function insertProfileToSupabase(u) {
   // Upsert by phone (unique): creates the row, or refreshes it if it exists.
   if (!LIVE || !sb) return;
@@ -223,20 +343,32 @@ function syncProfileToSupabase(u) {
   if (!LIVE || !sb) return;
   try { sb.from("profiles").upsert([{ phone: u.phone, name: u.name, role: u.role, password_hash: u.pass || "", area: u.area || null, address: u.address || null }], { onConflict: "phone" }).then(() => {}).catch(() => {}); } catch (e) {}
 }
-function logout() { localStorage.removeItem("bazar_session"); renderAll(); toast("Logged out."); }
+function logout() { localStorage.removeItem("bazar_session"); renderAll(); toast("Logged out."); if (PAGE === "admin.html" || PAGE === "orders.html") location.href = "index.html"; }
 function closeModal() { trackCode = null; $("#modal").classList.remove("open"); }
 function requireLogin(role) { const s = session(); if (!s) { openAuth(); return null; } return s; }
 
 // ---------- Storefront ----------
-function goTo(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth" }); }
+// v15: in-page anchors are now cross-page links. Same-section ids still
+// scroll when they exist on the current page.
+function goTo(id) {
+  const map = { grid: "categories.html", catTiles: "categories.html", catTitle: "categories.html", deals: "deals.html", dealsHead: "deals.html", why: "about.html" };
+  if (id === "siteFooter") { const f = document.getElementById("shellFooter"); if (f) f.scrollIntoView({ behavior: "smooth" }); return; }
+  if (map[id]) {
+    if (PAGE === map[id]) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth" }); }
+    else location.href = map[id];
+    return;
+  }
+  const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth" });
+}
 let activeCat = "All";
 function renderCats() {
   const cats = ["All", ...window.BAZARKORI_CATEGORIES];
-  $("#cats").innerHTML = cats.map(c => `<button class="cat ${c === activeCat ? "active" : ""}" onclick="setCat('${esc(c)}')">${esc(c)}</button>`).join("");
+  const chips = $("#cats");
+  if (chips) chips.innerHTML = cats.map(c => `<button class="cat ${c === activeCat ? "active" : ""}" onclick="setCat('${esc(c)}')">${esc(c)}</button>`).join("");
   const sel = $("#catSelect");
   if (sel) sel.innerHTML = cats.map(c => `<option value="${esc(c)}" ${c === activeCat ? "selected" : ""}>${c === "All" ? "All Categories" : esc(c)}</option>`).join("");
   const fc = $("#footerCats");
-  if (fc) fc.innerHTML = window.BAZARKORI_CATEGORIES.slice(0, 6).map(c => `<a href="javascript:void(0)" onclick="setCat('${esc(c)}');goTo('grid')">${esc(c)}</a>`).join("");
+  if (fc) fc.innerHTML = window.BAZARKORI_CATEGORIES.slice(0, 6).map(c => `<a href="categories.html?cat=${encodeURIComponent(c)}">${esc(c)}</a>`).join("");
 }
 // ---------- Category tiles (FreshMart-style "Shop by Category") ----------
 function renderCatTiles() {
@@ -244,7 +376,7 @@ function renderCatTiles() {
   el.innerHTML = window.BAZARKORI_CATEGORIES.map(c => {
     const ps = window.BAZARKORI_PRODUCTS.filter(p => p.category === c);
     const first = ps[0]; if (!first) return "";
-    return `<div class="cat-tile" onclick="setCat('${esc(c)}');goTo('grid')">
+    return `<div class="cat-tile" onclick="goCat('${esc(c)}')">
       <img src="${first.img}" alt="${esc(c)}" loading="lazy" onerror="this.style.display='none'">
       <b>${esc(c)}</b><span>${ps.length} টি পণ্য</span></div>`;
   }).join("");
@@ -252,10 +384,18 @@ function renderCatTiles() {
 function setCat(c) { activeCat = c; renderProducts(); }
 function is18(p) { return ["Tong & Smokestore", "Smokeless & Vape", "Sexual Wellness"].includes(p.category); }
 function renderProducts() {
-  const q = ($("#search").value || "").toLowerCase();
+  const grid = $("#grid"); if (!grid) return;
+  const searchEl = $("#search");
+  const q = ((searchEl ? searchEl.value : qp("q")) || "").toLowerCase();
   let list = window.BAZARKORI_PRODUCTS.filter(p => (activeCat === "All" || p.category === activeCat) && (!q || (p.name + " " + p.unit + " " + p.category).toLowerCase().includes(q)));
-  $("#catTitle").textContent = activeCat === "All" ? `Our Recommendations — ${list.length} products` : `${activeCat} — ${list.length} products`;
-  $("#grid").innerHTML = list.map(p => `<div class="card" onclick="openProduct(${p.id})">
+  const sortEl = $("#sortSelect");
+  const sort = (sortEl && sortEl.value) || qp("sort") || "";
+  if (sort === "low") list = [...list].sort((a, b) => a.price - b.price);
+  else if (sort === "high") list = [...list].sort((a, b) => b.price - a.price);
+  else if (sort === "name") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  const title = $("#catTitle");
+  if (title) title.textContent = activeCat === "All" ? `Our Recommendations — ${list.length} products` : `${activeCat} — ${list.length} products"`
+  grid.innerHTML = list.map(p => `<div class="card" onclick="openProduct(${p.id})">
     <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
     <div class="pad"><h3>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h3>
     <div class="unit">${esc(p.unit)} • ${esc(p.category)}</div>
@@ -287,29 +427,26 @@ function renderFeatured() {
 function openProduct(id) {
   const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return;
   if (is18(p) && !confirm("Age Verification: you must be 18+ to view this product. Are you 18 or older?")) return;
-  $("#modalBody").innerHTML = `<img src="${p.img}" onerror="this.style.display='none'"><h2>${esc(p.name)}</h2>
-  <p><b>Size:</b> ${esc(p.unit)} • <b>Category:</b> ${esc(p.category)} • <b>Price:</b> ${fmt(p.price)}</p>
-  <p class="muted">In stock • Delivered in ~25 mins in ${window.BAZARKORI_AREAS.join(", ")} • Delivery fee ৳30 • Cash on Delivery • ${is18(p) ? "Discreet Stealth Pack." : ""}</p>
-  <div style="display:flex;gap:8px"><button class="btn gold" onclick="addToCart(${p.id});closeModal()">Add to Cart — ${fmt(p.price)}</button><button class="btn ghost" onclick="closeModal()">Close</button></div>`;
-  $("#modal").classList.add("open");
+  location.href = "product.html?id=" + id;
 }
 
 // ---------- Cart & Checkout ----------
 const cart = () => ls("bazar_cart", []);
 const setCart = c => save("bazar_cart", c);
 function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); toast(p.name + " added."); }
-function addCustomItem() { const v = $("#customItem").value.trim(); if (!v) return; const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, qty: 1, img: "" }); setCart(c); $("#customItem").value = ""; renderCart(); toast("Custom item added — we will confirm its price."); }
+function addCustomItem() { const inp = $("#customItem"); if (!inp) return; const v = inp.value.trim(); if (!v) return; const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, qty: 1, img: "" }); setCart(c); inp.value = ""; renderCart(); toast("Custom item added — we will confirm its price."); }
 function changeQty(id, d) { const c = cart(); const f = c.find(x => String(x.id) === String(id)); if (!f) return; f.qty += d; if (f.qty <= 0) c.splice(c.indexOf(f), 1); setCart(c); renderCart(); }
-function toggleCart() { renderCart(); $("#cartDrawer").classList.toggle("open"); }
+function toggleCart() { location.href = "cart.html"; }
 function renderCart() {
   const c = cart(); const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
-  $("#cartCount").textContent = c.reduce((a, i) => a + i.qty, 0); $("#cartTotal").textContent = sub + (c.length ? DELIVERY_FEE : 0);
-  $("#cartItems").innerHTML = c.length ? c.map(i => `<div style="display:flex;gap:8px;align-items:center;border-bottom:1px solid #eee;padding:8px 0">
+  const cc = $("#cartCount"); if (cc) cc.textContent = c.reduce((a, i) => a + i.qty, 0);
+  const ct = $("#cartTotal"); if (ct) ct.textContent = sub + (c.length ? DELIVERY_FEE : 0);
+  const ci = $("#cartItems"); if (ci) ci.innerHTML = c.length ? c.map(i => `<div style="display:flex;gap:8px;align-items:center;border-bottom:1px solid #eee;padding:8px 0">
     ${i.img ? `<img src="${i.img}" style="width:48px;height:48px;object-fit:cover;border-radius:8px" onerror="this.style.display='none'">` : ""}
     <div style="flex:1"><b>${esc(i.name)}</b><br><span class="muted">${fmt(i.price)} each</span></div>
     <button onclick="changeQty('${i.id}',-1)">−</button> ${i.qty} <button onclick="changeQty('${i.id}',1)">+</button>
     <b>${fmt(i.price * i.qty)}</b></div>`).join("") : "<p>Your cart is empty.</p>";
-  $("#cartSummary").innerHTML = c.length ? `<p>Subtotal: ${fmt(sub)}<br>Delivery Fee: ${fmt(DELIVERY_FEE)}<br><b>Total: ${fmt(sub + DELIVERY_FEE)}</b> (COD)</p>` : "";
+  const cs = $("#cartSummary"); if (cs) cs.innerHTML = c.length ? `<p>Subtotal: ${fmt(sub)}<br>Delivery Fee: ${fmt(DELIVERY_FEE)}<br><b>Total: ${fmt(sub + DELIVERY_FEE)}</b> (COD)</p>` : "";
   // Checkout auto-fill: saved profile by default; anything already typed in the
   // form wins, so the 8s refresh never wipes the customer's edits.
   const s = session();
@@ -318,7 +455,7 @@ function renderCart() {
   const dPhone = cur.phone || (s && s.phone) || "";
   const dAddr = cur.addr || (s && s.address) || "";
   const dArea = cur.area || (s && s.area) || window.BAZARKORI_AREAS[0];
-  $("#checkoutBox").innerHTML = c.length ? `<label>Delivery Area</label><select id="coArea">${window.BAZARKORI_AREAS.map(a => `<option ${a === dArea ? "selected" : ""}>${a}</option>`).join("")}</select>
+  const cb = $("#checkoutBox"); if (cb) cb.innerHTML = c.length ? `<label>Delivery Area</label><select id="coArea">${window.BAZARKORI_AREAS.map(a => `<option ${a === dArea ? "selected" : ""}>${a}</option>`).join("")}</select>
   <label>Full Address</label><input id="coAddr" placeholder="House, road, area" value="${esc(dAddr)}"><label>Your Name</label><input id="coName" placeholder="Name" value="${esc(dName)}"><label>Phone</label><input id="coPhone" placeholder="01XXXXXXXXX" value="${esc(dPhone)}">
   <button class="btn" style="width:100%;margin-top:8px" onclick="placeOrder()">Place Order — Cash on Delivery</button>` : "";
 }
@@ -331,11 +468,11 @@ function placeOrder() {
   if (s.role === "customer") saveProfileData(s.phone, { name, phone, address: addr, area });
   const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
   const o = { code: "LN-" + (1000 + orders().length + 1), customer: name, phone, area, address: addr, items: c, subtotal: sub, fee: DELIVERY_FEE, total: sub + DELIVERY_FEE, status: "placed", statusLog: { placed: new Date().toISOString() }, rider: "", created: new Date().toISOString(), date: todayStr() };
-  const all = orders(); all.unshift(o); setOrders(all); setCart([]); renderCart(); toggleCart(); renderAll();
+  const all = orders(); all.unshift(o); setOrders(all); setCart([]); renderCart(); renderAll();
   notify("Order " + o.code + " placed! Broadcasting to online riders…");
-  openTrackPopup(o.code); // v9: live countdown popup opens immediately
   emailOrderNotify(o); // fire-and-forget; admin badge/sound above still fires regardless
   if (LIVE && sb) sb.from("orders").insert([{ order_code: o.code, customer_name: name, customer_phone: phone, delivery_address: addr, area, items: c, subtotal_bdt: sub, delivery_fee_bdt: DELIVERY_FEE, total_bdt: o.total, status: "placed" }]).then(() => {});
+  location.href = "orders.html?track=" + o.code; // orders page auto-opens the live countdown popup
 }
 
 // ---------- Order status flow (v7) ----------
@@ -486,7 +623,8 @@ function renderMyOrders() {
   const s = session();
   const list = s ? orders().filter(o => o.phone === s.phone || o.customer === s.name) : orders().slice(0, 5);
   const profileBar = (s && s.role === "customer") ? `<div class="panel"><b>আমার প্রোফাইল</b><p class="muted">নাম: ${esc(s.name || "—")} • ফোন: ${esc(s.phone || "—")} • ঠিকানা: ${esc(s.address || "— (এখনো দেওয়া হয়নি)")}</p><button class="btn small gold" onclick="openProfileModal()">✏️ Edit Profile / প্রোফাইল বদলান</button></div>` : "";
-  $("#myOrders").innerHTML = profileBar + (s ? "" : "<p class='muted'>Login to see only your orders. Showing recent orders (demo).</p>") + (list.length ? list.map(o => {
+  const mo = $("#myOrders"); if (!mo) return;
+  mo.innerHTML = profileBar + (s ? "" : "<p class='muted'>Login to see only your orders. Showing recent orders (demo).</p>") + (list.length ? list.map(o => {
     const idx = STEPS.findIndex(x => x[0] === o.status);
     const log = o.statusLog || {};
     return `<div class="panel"><b>${o.code}</b> • ${fmt(o.total)} • ${esc(o.area)} • <span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>
@@ -641,6 +779,7 @@ function renderCustomerList(q) {
 }
 function renderAdmin() {
   const s = session(); const el = $("#adminPanel");
+  if (!el) return;
   if (!s || s.role !== "admin") { el.innerHTML = `<p>Admin panel is for the owner only. There is <b>no admin registration</b>.</p><button class="btn" onclick="openAuth()">লগইন</button>`; return; }
   if (adminTab === "customers") {
     el.innerHTML = `<div style="display:flex;gap:8px;margin-bottom:12px">
@@ -739,21 +878,71 @@ function reactivateRider(phone) {
   renderAll(); toast(me.name + " re-activated.");
 }
 
+
+// ---------- Page setup (v15) ----------
+// Reads the URL (?cat=, ?q=, ?sort=, ?id=, ?track=) and prepares the page.
+function initPageParams() {
+  if (PAGE === "categories.html") {
+    if (qp("cat")) activeCat = qp("cat");
+    const si = $("#search"); if (si && qp("q")) si.value = qp("q");
+    const so = $("#sortSelect"); if (so && qp("sort")) so.value = qp("sort");
+    const cs = $("#catSelect"); if (cs) cs.value = activeCat;
+  }
+  if (PAGE === "orders.html" && qp("track")) openTrackPopup(qp("track"));
+  if (PAGE === "login.html") {
+    const s = session(); const li = document.getElementById("loginInfo");
+    if (li) li.innerHTML = s ? `<b>লগইন করা আছে:</b> ${esc(s.name)} (${esc(s.role)}) — <button class="btn small ghost" onclick="logout()">Logout</button>` : `<span class="muted">এখনো লগইন করা হয়নি। উপরে লগইন করুন বা নতুন অ্যাকাউন্ট বানান।</span>`;
+  }
+}
+
+// ---------- Product detail page (v15) ----------
+let detailQty = 1;
+function renderProductDetail() {
+  const el = $("#productDetail"); if (!el) return;
+  const id = Number(qp("id"));
+  const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id);
+  if (!p) { el.innerHTML = `<p>পণ্যটি পাওয়া যায়নি।</p><p><a href="categories.html">← সব পণ্য দেখুন</a></p>`; return; }
+  detailQty = 1;
+  const similar = window.BAZARKORI_PRODUCTS.filter(x => x.category === p.category && x.id !== p.id).slice(0, 8);
+  el.innerHTML = `
+  <p><a href="categories.html">← সব পণ্য</a> • <a href="categories.html?cat=${encodeURIComponent(p.category)}">${esc(p.category)}</a></p>
+  <div class="detail">
+    <div class="detail-img"><img src="${p.img}" alt="${esc(p.name)}" onerror="this.style.display='none'"></div>
+    <div class="detail-info">
+      <h1>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h1>
+      <p class="detail-unit">Size: <b>${esc(p.unit)}</b> • Category: <b>${esc(p.category)}</b></p>
+      <p class="detail-price">${fmt(p.price)}</p>
+      <p class="muted">In stock • Delivered in ~25 mins in ${window.BAZARKORI_AREAS.join(", ")} • Delivery fee ৳30 • Cash on Delivery${is18(p) ? " • Discreet Stealth Pack." : ""}</p>
+      <div class="qty-row"><button class="qty-btn" onclick="detailQtyChange(-1)">−</button><span id="detailQty">1</span><button class="qty-btn" onclick="detailQtyChange(1)">+</button>
+      <button class="btn gold" onclick="addDetailToCart(${p.id})">Add to Cart — ${fmt(p.price)}</button></div>
+      <p><a class="btn ghost" href="cart.html">🛒 Go to Cart</a></p>
+    </div>
+  </div>
+  <div class="section-head"><h2>একই ক্যাটাগরির আরও পণ্য</h2><a href="categories.html?cat=${encodeURIComponent(p.category)}">View All →</a></div>
+  <div class="grid">${similar.map(x => `<div class="card" onclick="openProduct(${x.id})">
+    <img src="${x.img}" alt="${esc(x.name)}" loading="lazy" onerror="this.style.display='none'">
+    <div class="pad"><h3>${esc(x.name)}</h3><div class="unit">${esc(x.unit)} • ${esc(x.category)}</div>
+    <div class="row"><span class="price">${fmt(x.price)}</span><button class="add" onclick="event.stopPropagation();addToCart(${x.id})">ADD</button></div></div></div>`).join("") || "<p>এই ক্যাটাগরিতে আর কোনো পণ্য নেই।</p>"}</div>`;
+}
+function detailQtyChange(d) { detailQty = Math.max(1, detailQty + d); const q = $("#detailQty"); if (q) q.textContent = detailQty; }
+function addDetailToCart(id) { for (let i = 0; i < detailQty; i++) addToCart(id); toast("কার্টে যোগ হয়েছে।"); }
+
 // ---------- Views / init ----------
 // Role gating (v10): the website has NO rider panel at all (riders use the
 // Android app). A customer/visitor never sees Admin; the admin sees Admin
 // only after logging in with the owner credentials in the unified login.
+// v15: views are real pages now. Old showView() callers just navigate.
 function showView(v) {
-  const s = session();
-  if (v === "admin" && (!s || s.role !== "admin")) { openAuth(); toast("Admin panel দেখতে লগইন করুন।"); return; }
-  ["store", "orders", "admin"].forEach(x => $("#view-" + x).classList.toggle("hidden", x !== v));
-  if (v === "orders") renderMyOrders(); if (v === "admin") renderAdmin();
-  window.scrollTo(0, 0);
+  const map = { store: "index.html", orders: "orders.html", admin: "admin.html", cart: "cart.html", login: "login.html" };
+  if (v === "admin") { const s = session(); if (!s || s.role !== "admin") { openAuth(); toast("Admin panel দেখতে লগইন করুন।"); return; } }
+  const target = map[v] || "index.html";
+  if (PAGE === target) { if (v === "orders") renderMyOrders(); if (v === "admin") renderAdmin(); window.scrollTo(0, 0); return; }
+  location.href = target;
 }
 function renderAll() {
   const s = session();
-  $("#whoami").textContent = s ? `Logged in: ${s.name} (${s.role})` : "";
-  $("#logoutBtn").classList.toggle("hidden", !s);
+  const who = $("#whoami"); if (who) who.textContent = s ? `Logged in: ${s.name} (${s.role})` : "";
+  const lb = $("#logoutBtn"); if (lb) lb.classList.toggle("hidden", !s);
   // Header buttons by role (v10): logged out → Login/Register only;
   // customer → no Admin button; admin (owner) → Admin button.
   // There is no Rider Panel button on the website at all.
@@ -761,17 +950,20 @@ function renderAll() {
   const loginBtn = $("#loginBtn"), adminBtn = $("#adminBtn");
   if (loginBtn) loginBtn.classList.toggle("hidden", !!s);
   if (adminBtn) adminBtn.classList.toggle("hidden", !s || s.role !== "admin");
-  // Safety net: if the admin view is open and the session is no longer the
-  // owner (e.g. after logout), close it back to the store — without calling
-  // showView (avoids recursion).
-  if (!$("#view-admin").classList.contains("hidden") && (!s || s.role !== "admin")) {
-    $("#view-admin").classList.add("hidden"); $("#view-store").classList.remove("hidden");
-  }
-  renderCats(); renderCatTiles(); renderDeals(); renderProducts(); renderCart(); renderMyOrders(); renderAdmin();
+  // v15: only render what exists on THIS page — each page has its own job.
+  renderCats();
+  if (PAGE === "index.html") { renderCatTiles(); renderDeals(); }
+  else if (PAGE === "categories.html") { renderProducts(); }
+  else if (PAGE === "deals.html") { renderDeals(); }
+  else if (PAGE === "product.html") { renderProductDetail(); }
+  else if (PAGE === "cart.html") { renderCart(); }
+  else if (PAGE === "orders.html") { renderMyOrders(); }
+  else if (PAGE === "admin.html") { renderAdmin(); }
+  renderCart(); // header cart count + total, on every page (guarded inside)
   const newCount = orders().filter(o => o.status === "placed").length;
-  const b = $("#orderBadge"); b.textContent = newCount; b.classList.toggle("hidden", !newCount);
+  const b = $("#orderBadge"); if (b) { b.textContent = newCount; b.classList.toggle("hidden", !newCount); }
 }
-seed(); initSupabase(); renderAll();
+seed(); mountShell(); initSupabase(); initPageParams(); renderAll();
 // Poll every 8s so an order placed in another tab/device appears (Supabase realtime does this live when configured).
 setInterval(() => { renderAll(); }, 8000);
 // 1-second tick: live countdown popup + rider/admin countdowns.

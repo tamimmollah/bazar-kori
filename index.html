@@ -12,185 +12,92 @@
 <script src="products.js"></script>
 </head>
 <body>
-<div class="topbar">
-  <span>📍 Demra Thana + আশেপাশের এলাকা</span>
-  <span>🚚 ফ্ল্যাট ৳৩০ ডেলিভারি • 💵 COD</span>
-  <span>📞 <a href="tel:01865861015">01865-861015</a> • ⏰ খোলা: রাত ১২টা পর্যন্ত</span>
-</div>
-<header>
-  <div class="logo" onclick="showView('store')"><img class="logo-img" src="logo.png" alt="বাজার করি"><span class="logo-tag">তাজা। সস্তা। ২৫ মিনিটে।</span></div>
-  <div class="search-group">
-    <select id="catSelect" onchange="setCat(this.value);goTo('grid')" aria-label="ক্যাটাগরি বেছে নিন"></select>
-    <input class="search" id="search" placeholder="তাজা ফল, সবজি, তেল, কোক… খুঁজুন" oninput="renderProducts()">
-    <button class="search-btn" onclick="goTo('grid')" aria-label="খুঁজুন">🔍</button>
-  </div>
-  <button class="btn ghost" id="loginBtn" onclick="openAuth()">Login / Register</button>
-  <button class="btn gold" onclick="toggleCart()">🛒 Cart <span id="cartCount">0</span> • ৳<span id="cartTotal">0</span></button>
-  <button class="btn" onclick="showView('orders')">My Orders <span class="badge hidden" id="orderBadge">0</span></button>
-  <button class="btn ghost hidden" id="adminBtn" onclick="showView('admin')">Admin</button>
-  <span id="whoami" class="muted"></span>
-  <button class="btn ghost hidden" id="logoutBtn" onclick="logout()">Logout</button>
-</header>
-<nav class="mainnav">
-  <button onclick="showView('store');window.scrollTo({top:0,behavior:'smooth'})">🏠 Home</button>
-  <button onclick="goTo('catTiles')">Categories ▾</button>
-  <button onclick="goTo('deals')">Deals</button>
-  <button onclick="setCat('All');goTo('grid')">New Arrivals</button>
-  <button onclick="goTo('why')">About Us</button>
-  <button onclick="goTo('siteFooter')">Contact Us</button>
-  <span class="flash-badge" onclick="goTo('deals')">⚡ FLASH DEALS</span>
-</nav>
-<div id="demoBanner" class="panel" style="max-width:1200px;margin:12px auto 0;background:#fff7d6;border-color:#f5a623">
-  <b>Demo / Local mode:</b> Supabase is not configured yet (placeholder in <code>supabase-config.js</code>).
-  Orders, riders and admin data are stored in this browser only. Fill in your free Supabase URL + anon key to go live — see README.md.
-  <button class="btn small gold" onclick="requestNotify()">🔔 Enable browser notifications</button>
-</div>
+<div id="shellHeader"></div>
 <main>
-  <section id="view-store">
-    <div class="hero hero-fm">
-      <div class="hero-left">
-        <div class="hero-eyebrow">🌿 তাজা পণ্যের নিশ্চয়তা</div>
-        <h1>তাজা বাজার,<br><span>ভালো জীবন</span></h1>
-        <p>ঘরে বসে তাজা ফল, সবজি আর নিত্যপ্রয়োজনীয় সবকিছু — স্বাস্থ্যকর আর সুখী জীবনের জন্য। ডেমরার নিজের দোকান থেকে, মাত্র ২৫ মিনিটে আপনার দরজায়।</p>
-        <div class="hero-cta">
-          <button class="btn hero-btn" onclick="goTo('grid')">এখনই কিনুন →</button>
-          <button class="btn ghost hero-btn" onclick="goTo('deals')">অফার দেখুন</button>
-        </div>
-        <input class="hero-search" id="heroSearch" placeholder="কী লাগবে? খুঁজুন… যেমন: তেল, কোক, চিনি" oninput="document.getElementById('search').value=this.value;renderProducts()" onkeydown="if(event.key==='Enter'){goTo('grid')}">
-        <div class="trust-pills">
-          <span>🌿 তাজা পণ্য<br><b>সেরা মানের</b></span>
-          <span>🚚 ফ্ল্যাট ৳৩০<br><b>২৫ মিনিটে ডেলিভারি</b></span>
-          <span>🔒 নিরাপদ<br><b>Cash on Delivery</b></span>
-          <span>↩️ সহজ রিটার্ন<br><b>সমস্যা হলে জানান</b></span>
-        </div>
+  <div class="hero hero-fm">
+    <div class="hero-left">
+      <div class="hero-eyebrow">🌿 তাজা পণ্যের নিশ্চয়তা</div>
+      <h1>তাজা বাজার,<br><span>ভালো জীবন</span></h1>
+      <p>ঘরে বসে তাজা ফল, সবজি আর নিত্যপ্রয়োজনীয় সবকিছু — স্বাস্থ্যকর আর সুখী জীবনের জন্য। ডেমরার নিজের দোকান থেকে, মাত্র ২৫ মিনিটে আপনার দরজায়।</p>
+      <div class="hero-cta">
+        <button class="btn hero-btn" onclick="location.href='categories.html'">এখনই কিনুন →</button>
+        <button class="btn ghost hero-btn" onclick="location.href='deals.html'">অফার দেখুন</button>
       </div>
-      <div class="hero-right">
-        <img class="hero-basket" src="https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=1200&q=80" alt="তাজা সবজি ও ফলের ঝুড়ি" loading="eager" onerror="this.style.display='none'">
-        <div class="hero-badge"><b>২৫<br>মিনিটে</b><span>ডেলিভারি</span></div>
+      <input class="hero-search" id="heroSearch" placeholder="কী লাগবে? খুঁজুন… যেমন: তেল, কোক, চিনি" onkeydown="if(event.key==='Enter'){location.href='categories.html?q='+encodeURIComponent(this.value)}">
+      <div class="trust-pills">
+        <span>🌿 তাজা পণ্য<br><b>সেরা মানের</b></span>
+        <span>🚚 ফ্ল্যাট ৳৩০<br><b>২৫ মিনিটে ডেলিভারি</b></span>
+        <span>🔒 নিরাপদ<br><b>Cash on Delivery</b></span>
+        <span>↩️ সহজ রিটার্ন<br><b>সমস্যা হলে জানান</b></span>
       </div>
     </div>
-
-    <div class="section-head"><h2>🛒 ক্যাটাগরি দিয়ে কিনুন</h2><a href="javascript:void(0)" onclick="setCat('All');goTo('grid')">View All →</a></div>
-    <div class="cat-tiles" id="catTiles"></div>
-
-    <div class="promos">
-      <div class="promo promo-offer">
-        <img src="https://images.unsplash.com/photo-1518843875459-f738682238a6?w=1200&q=80" alt="তাজা সবজি" loading="lazy" onerror="this.style.display='none'">
-        <div class="promo-text">
-          <h3>সপ্তাহের<br><span>সেরা অফার</span></h3>
-          <p>জনপ্রিয় পণ্যে ১০% পর্যন্ত ছাড়। এই সপ্তাহেই শেষ!</p>
-          <button class="btn gold" onclick="goTo('deals')">এখনই কিনুন →</button>
-        </div>
-        <div class="promo-disc">১০%<br>ছাড়</div>
-      </div>
-      <div class="promo promo-delivery">
-        <div class="promo-text">
-          <h3>২৫ মিনিটে<br><span>ডেলিভারি!</span></h3>
-          <p>তাজা আর দ্রুত ডেলিভারি, আপনার দরজায়।</p>
-          <button class="btn" onclick="goTo('grid')">অর্ডার করুন →</button>
-        </div>
-        <img src="https://images.unsplash.com/photo-1526367790999-0150786686a2?w=1200&q=80" alt="ডেলিভারি রাইডার" loading="lazy" onerror="this.style.display='none'">
-      </div>
-    </div>
-
-    <div class="section-head" id="dealsHead"><h2>🔥 আজকের ডিল</h2><a href="javascript:void(0)" onclick="setCat('All');goTo('grid')">View All Deals →</a></div>
-    <div class="grid deals-grid" id="deals"></div>
-
-    <div class="howto">
-      <h2>কিভাবে অর্ডার করবেন?</h2>
-      <div class="howto-steps">
-        <div class="howto-step"><span class="howto-num">১</span><b>পণ্য বেছে নিন</b><span>খুঁজুন, ADD চাপুন, কার্টে নিন</span></div>
-        <div class="howto-step"><span class="howto-num">২</span><b>রাইডার কনফার্ম করবে</b><span>অর্ডার দিলেই রাইডার Accept করবে</span></div>
-        <div class="howto-step"><span class="howto-num">৩</span><b>২৫ মিনিটে ডেলিভারি</b><span>লাইভ ট্র্যাকে দেখুন, COD তে পেমেন্ট</span></div>
-      </div>
-    </div>
-
-    <div class="why" id="why">
-      <h2>🌿 কেন বাজার করি?</h2>
-      <div class="why-grid">
-        <div class="why-tile"><span class="why-ico">✅</span><b>সেরা মান</b><span>শুধু তাজা আর সেরা পণ্য।</span></div>
-        <div class="why-tile"><span class="why-ico">💰</span><b>সাশ্রয়ী দাম</b><span>পরিবারের বাজেটের জন্য সেরা দাম।</span></div>
-        <div class="why-tile"><span class="why-ico">🚚</span><b>দ্রুত ডেলিভারি</b><span>২৫ মিনিটে আপনার দরজায়।</span></div>
-        <div class="why-tile"><span class="why-ico">🔒</span><b>১০০% নিরাপদ</b><span>Cash on Delivery — আগে পণ্য, পরে টাকা।</span></div>
-        <div class="why-tile"><span class="why-ico">↩️</span><b>সহজ রিটার্ন</b><span>সমস্যা হলে জানান, সমাধান হবে।</span></div>
-      </div>
-    </div>
-
-    <div class="testimonials">
-      <div class="testi">
-        <h3>আমাদের কাস্টমাররা যা বলেন</h3>
-        <p class="testi-quote">"বাজার করি দিয়ে বাজার করা এখন অনেক সহজ। তাজা পণ্য, দারুণ দাম আর ২৫ মিনিটেই ডেলিভারি!"</p>
-        <p class="testi-who">— রহিমা আ., ডেমরা</p>
-        <div class="testi-dots"><span class="on"></span><span></span><span></span></div>
-      </div>
-      <div class="testi trust">
-        <h3>Demra-র খুশি কাস্টমারদের আস্থা</h3>
-        <p class="trust-num">৪.৯/৫ <span class="stars">★★★★★</span></p>
-        <p class="muted">গ্রাহক রেটিং • তাজা বাজার, প্রতিদিন</p>
-      </div>
-    </div>
-
-    <div class="cats" id="cats"></div>
-    <h2 id="catTitle">Our Recommendations</h2>
-    <div class="grid" id="grid"></div>
-  </section>
-
-  <section id="view-orders" class="hidden">
-    <div class="panel"><h2>My Orders — Live Tracking</h2><div id="myOrders"></div></div>
-  </section>
-
-  <section id="view-admin" class="hidden">
-    <div class="panel"><h2>👑 Admin Dashboard — Owner Only</h2><div id="adminPanel"></div></div>
-  </section>
-</main>
-
-<div class="drawer" id="cartDrawer">
-  <h2>Your Cart <button class="btn ghost small" style="float:right" onclick="toggleCart()">✕</button></h2>
-  <div id="cartItems"></div>
-  <input id="customItem" placeholder="Search or add custom item… (press Enter)" onkeydown="if(event.key==='Enter')addCustomItem()">
-  <p class="muted">Can't find a product? Type it above and press Enter — we will try to get it from a local dokan.</p>
-  <div id="cartSummary"></div>
-  <div id="checkoutBox"></div>
-</div>
-
-<div class="modal" id="modal"><div class="sheet" id="modalBody"></div></div>
-<div class="toast" id="toast"></div>
-<a class="wa-float" href="https://wa.me/8801865861015?text=%E0%A6%86%E0%A6%B8%E0%A6%B8%E0%A6%BE%E0%A6%B2%E0%A6%BE%E0%A6%AE%E0%A7%81%20%E0%A6%86%E0%A6%B2%E0%A6%BE%E0%A6%87%E0%A6%95%E0%A7%81%E0%A6%AE%2C%20%E0%A6%AC%E0%A6%BE%E0%A6%9C%E0%A6%BE%E0%A6%B0%20%E0%A6%95%E0%A6%B0%E0%A6%BF%20%E0%A6%A5%E0%A7%87%E0%A6%95%E0%A7%87%20%E0%A6%B8%E0%A6%BE%E0%A6%B9%E0%A6%BE%E0%A6%AF%E0%A7%8D%E0%A6%AF%20%E0%A6%A6%E0%A6%B0%E0%A6%95%E0%A6%BE%E0%A6%B0%E0%A5%A4" target="_blank" rel="noopener" aria-label="WhatsApp-এ সাহায্য নিন"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
-<footer id="siteFooter">
-  <div class="footer-cols">
-    <div class="footer-col brand">
-      <img class="footer-logo" src="logo.png" alt="বাজার করি">
-      <b>বাজার করি</b>
-      <p>তাজা। সস্তা। ২৫ মিনিটে।<br>ডেমরার নিজের বাজার — তাজা বাজার, প্রতিদিন।</p>
-    </div>
-    <div class="footer-col">
-      <b>Quick Links</b>
-      <a href="javascript:void(0)" onclick="showView('store');window.scrollTo({top:0,behavior:'smooth'})">Home</a>
-      <a href="javascript:void(0)" onclick="goTo('catTiles')">Categories</a>
-      <a href="javascript:void(0)" onclick="goTo('deals')">Deals</a>
-      <a href="javascript:void(0)" onclick="goTo('why')">About Us</a>
-      <a href="javascript:void(0)" onclick="goTo('siteFooter')">Contact Us</a>
-    </div>
-    <div class="footer-col">
-      <b>Customer Service</b>
-      <a href="javascript:void(0)" onclick="showView('orders')">My Orders</a>
-      <a href="javascript:void(0)" onclick="showView('orders')">Order Tracking</a>
-      <a href="https://wa.me/8801865861015" target="_blank" rel="noopener">WhatsApp-এ সাহায্য নিন</a>
-      <a href="javascript:void(0)" onclick="goTo('why')">কেন বাজার করি?</a>
-    </div>
-    <div class="footer-col">
-      <b>Categories</b>
-      <span id="footerCats"></span>
-    </div>
-    <div class="footer-col">
-      <b>Contact Us</b>
-      <p>📍 Demra Thana, Dhaka<br>📞 <a href="tel:01865861015">01865-861015</a><br>💬 <a href="https://wa.me/8801865861015">WhatsApp</a><br>✉️ tamimmolla81@gmail.com<br>⏰ খোলা: রাত ১২টা পর্যন্ত</p>
-      <b>We Accept</b>
-      <p class="pay-badges"><span>COD</span><span>bKash</span></p>
+    <div class="hero-right">
+      <img class="hero-basket" src="https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=1200&q=80" alt="তাজা সবজি ও ফলের ঝুড়ি" loading="eager" onerror="this.style.display='none'">
+      <div class="hero-badge"><b>২৫<br>মিনিটে</b><span>ডেলিভারি</span></div>
     </div>
   </div>
-  <div class="footer-bottom">© 2026 বাজার করি — All Rights Reserved. • Riders buy with their own money and keep only the delivery charge. 10% of delivery earnings is due daily via bKash.</div>
-</footer>
+
+  <div class="section-head"><h2>🛒 ক্যাটাগরি দিয়ে কিনুন</h2><a href="categories.html">View All →</a></div>
+  <div class="cat-tiles" id="catTiles"></div>
+
+  <div class="promos">
+    <div class="promo promo-offer">
+      <img src="https://images.unsplash.com/photo-1518843875459-f738682238a6?w=1200&q=80" alt="তাজা সবজি" loading="lazy" onerror="this.style.display='none'">
+      <div class="promo-text">
+        <h3>সপ্তাহের<br><span>সেরা অফার</span></h3>
+        <p>জনপ্রিয় পণ্যে ১০% পর্যন্ত ছাড়। এই সপ্তাহেই শেষ!</p>
+        <button class="btn gold" onclick="location.href='deals.html'">এখনই কিনুন →</button>
+      </div>
+      <div class="promo-disc">১০%<br>ছাড়</div>
+    </div>
+    <div class="promo promo-delivery">
+      <div class="promo-text">
+        <h3>২৫ মিনিটে<br><span>ডেলিভারি!</span></h3>
+        <p>তাজা আর দ্রুত ডেলিভারি, আপনার দরজায়।</p>
+        <button class="btn" onclick="location.href='categories.html'">অর্ডার করুন →</button>
+      </div>
+      <img src="https://images.unsplash.com/photo-1526367790999-0150786686a2?w=1200&q=80" alt="ডেলিভারি রাইডার" loading="lazy" onerror="this.style.display='none'">
+    </div>
+  </div>
+
+  <div class="section-head"><h2>🔥 আজকের ডিল</h2><a href="deals.html">View All Deals →</a></div>
+  <div class="grid deals-grid" id="deals"></div>
+
+  <div class="howto">
+    <h2>কিভাবে অর্ডার করবেন?</h2>
+    <div class="howto-steps">
+      <div class="howto-step"><span class="howto-num">১</span><b>পণ্য বেছে নিন</b><span>খুঁজুন, ADD চাপুন, কার্টে নিন</span></div>
+      <div class="howto-step"><span class="howto-num">২</span><b>রাইডার কনফার্ম করবে</b><span>অর্ডার দিলেই রাইডার Accept করবে</span></div>
+      <div class="howto-step"><span class="howto-num">৩</span><b>২৫ মিনিটে ডেলিভারি</b><span>লাইভ ট্র্যাকে দেখুন, COD তে পেমেন্ট</span></div>
+    </div>
+  </div>
+
+  <div class="why">
+    <h2>🌿 কেন বাজার করি?</h2>
+    <div class="why-grid">
+      <div class="why-tile"><span class="why-ico">✅</span><b>সেরা মান</b><span>শুধু তাজা আর সেরা পণ্য।</span></div>
+      <div class="why-tile"><span class="why-ico">💰</span><b>সাশ্রয়ী দাম</b><span>পরিবারের বাজেটের জন্য সেরা দাম।</span></div>
+      <div class="why-tile"><span class="why-ico">🚚</span><b>দ্রুত ডেলিভারি</b><span>২৫ মিনিটে আপনার দরজায়।</span></div>
+      <div class="why-tile"><span class="why-ico">🔒</span><b>১০০% নিরাপদ</b><span>Cash on Delivery — আগে পণ্য, পরে টাকা।</span></div>
+      <div class="why-tile"><span class="why-ico">↩️</span><b>সহজ রিটার্ন</b><span>সমস্যা হলে জানান, সমাধান হবে।</span></div>
+    </div>
+  </div>
+
+  <div class="testimonials">
+    <div class="testi">
+      <h3>আমাদের কাস্টমাররা যা বলেন</h3>
+      <p class="testi-quote">"বাজার করি দিয়ে বাজার করা এখন অনেক সহজ। তাজা পণ্য, দারুণ দাম আর ২৫ মিনিটেই ডেলিভারি!"</p>
+      <p class="testi-who">— রহিমা আ., ডেমরা</p>
+      <div class="testi-dots"><span class="on"></span><span></span><span></span></div>
+    </div>
+    <div class="testi trust">
+      <h3>Demra-র খুশি কাস্টমারদের আস্থা</h3>
+      <p class="trust-num">৪.৯/৫ <span class="stars">★★★★★</span></p>
+      <p class="muted">গ্রাহক রেটিং • তাজা বাজার, প্রতিদিন</p>
+    </div>
+  </div>
+</main>
+<div id="shellFooter"></div>
 <script src="app.js"></script>
 </body>
 </html>
