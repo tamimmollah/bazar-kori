@@ -105,6 +105,14 @@ function adminShowDemo() { return !!ls("bazar_admin_show_demo", false); }
 function toggleAdminShowDemo() { save("bazar_admin_show_demo", !adminShowDemo()); renderAdmin(); }
 function adminVisibleOrders(list) { return adminShowDemo() ? (list || []) : (list || []).filter(o => !isDemoOrder(o)); }
 function adminVisibleUsers(list) { return adminShowDemo() ? (list || []) : (list || []).filter(u => !isDemoUser(u)); }
+// v36: header My Orders badge — when the signed-in user is the admin/owner,
+// count only admin-visible orders (same filter + toggle as the admin panel);
+// every other session keeps the old global count.
+function badgeOrders() {
+  const s = session();
+  if (s && s.role === "admin") return adminVisibleOrders(orders());
+  return orders();
+}
 function adminDemoToggleHTML() {
   const on = adminShowDemo();
   return `<button class="btn ${on ? "gold" : "ghost"}" onclick="toggleAdminShowDemo()">${on ? "👁️ ডেমো/টেস্ট ডেটা দেখানো হচ্ছে" : "🙈 ডেমো/টেস্ট ডেটা লুকানো"}</button>`;
@@ -2729,7 +2737,7 @@ function renderAll() {
   else if (PAGE === "admin.html") { renderAdmin(); }
   else if (PAGE === "rider.html") { renderRiderPage(); }
   renderCart(); // header cart count + total, on every page (guarded inside)
-  const newCount = orders().filter(o => o.status === "placed").length;
+  const newCount = badgeOrders().filter(o => o.status === "placed").length; // v36: admin sees real-only count
   const b = $("#orderBadge"); if (b) { b.textContent = newCount; b.classList.toggle("hidden", !newCount); }
   attachPwEyes(); // v33: eye toggle on every password input, after any re-render
   animatePage(); // v33: JS-driven page fade-in + scroll reveals + hero motion
@@ -2813,7 +2821,7 @@ function userIsBusy() {
   return false;
 }
 function updateOrderBadge() {
-  const newCount = orders().filter(o => o.status === "placed").length;
+  const newCount = badgeOrders().filter(o => o.status === "placed").length; // v36: admin sees real-only count
   const b = $("#orderBadge"); if (b) { b.textContent = newCount; b.classList.toggle("hidden", !newCount); }
 }
 function updateHeaderCart() {
