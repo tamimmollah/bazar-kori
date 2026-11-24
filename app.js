@@ -50,7 +50,10 @@ function serviceFeeFor(items) { return (items || cart()).reduce((a, i) => a + (i
 // unit sold + 10% of the delivery charges. Old orders without serviceFee
 // fall back to ৳5 × items qty.
 function riderDue(list) {
-  const service = list.reduce((a, o) => a + (o.serviceFee != null ? o.serviceFee : 5 * (o.items || []).reduce((x, i) => x + (i.qty || 1), 0)), 0);
+  // v34: a stored serviceFee of 0 is NOT real — pre-migration Supabase rows
+  // were backfilled with 0 when the v33 columns were added (see orderMoney).
+  // Fall back to ৳5 × units whenever the stored value is missing OR zero.
+  const service = list.reduce((a, o) => a + ((o.serviceFee != null && o.serviceFee > 0) ? o.serviceFee : 5 * (o.items || []).reduce((x, i) => x + (i.qty || 1), 0)), 0);
   const deliveryDue = Math.round(ordersFeeSum(list) * 0.10);
   return { service, deliveryDue, total: service + deliveryDue };
 }
@@ -82,21 +85,58 @@ const EMAIL_ERR = "সঠিক ইমেইল ঠিকানা দিন —
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 function normaliseEmail(raw) { return String(raw || "").trim().toLowerCase(); }
 function isValidEmail(raw) { return EMAIL_RE.test(String(raw || "").trim()); }
-// ADDRESS: a real, usable delivery address inside the delivery area —
-// minimum 12 characters, at least one digit (house/road/flat number) AND
-// letters, and must name one of the 8 delivery areas (Bangla or English).
-// Gibberish (one character repeated, no digits, too short, no area) is
-// rejected. Returns {ok:true} or {ok:false, error}.
-const ADDRESS_ERR = "সঠিক ঠিকানা দিন — বাড়ি/রোড নম্বরসহ আপনার এলাকার নাম লিখুন (যেমন: বাড়ি ১২, রোড ৫, ডেমরা)";
-const AREA_MATCHERS = [
-  ["demra", "ডেমরা"], ["sarulia", "সারুলিয়া"], ["matuail", "মাতুয়াইল"],
-  ["konapara", "কোনাপাড়া"], ["staff quarter", "staff", "স্টাফ কোয়ার্টার", "স্টাফ"],
-  ["jatrabari", "যাত্রাবাড়ী"], ["shyampur", "শ্যামপুর"], ["kadamtali", "কদমতলী"]
+// ---------- Delivery areas (v34) ----------
+// Tamim (24 Nov ~17:11): every locality in Demra Thana + around Staff
+// Quarter must be deliverable — Demra Thana's 7 DSCC wards (64–70) plus
+// the western neighbours. Sources: DSCC ward lists, BBS village list,
+// Dhaka Tribune (DND areas), Titas/UNB/Observer outage lists, IFIC
+// branch list. NOTE: Paikpara is on Tamim's list — the well-known
+// Paikpara is in Mirpur (DNCC); no Demra Paikpara turned up in the
+// sources, so this entry stays only because Tamim asked for it.
+// products.js also defines window.BAZARKORI_AREAS (8 areas, v15) — the
+// list below OVERRIDES it (app.js loads after products.js). Do NOT edit
+// products.js; this is the single source of truth now.
+const AREAS = [
+  { en: "Demra", bn: "ডেমরা" },
+  { en: "Sarulia", bn: "সারুলিয়া", alias: ["saralia"] },
+  { en: "Matuail", bn: "মাতুয়াইল" },
+  { en: "Konapara", bn: "কোনাপাড়া" },
+  { en: "Staff Quarter", bn: "স্টাফ কোয়ার্টার", alias: ["staff quarters", "staff"] },
+  { en: "Alamin Road", bn: "আলামিন রোড", alias: ["al amin road", "al-amin road", "alamin"] },
+  { en: "Bansher Pul", bn: "বাঁশের পুল", alias: ["basherpool", "basher pul", "baserpul"] },
+  { en: "Bamuil", bn: "বামুইল", alias: ["bamail"] },
+  { en: "Dogair", bn: "ডগাইর", alias: ["dagair"] },
+  { en: "Amulia", bn: "আমুলিয়া" },
+  { en: "Nandipara", bn: "নন্দীপাড়া" },
+  { en: "Boxnagar", bn: "বক্সনগর", alias: ["purba boxnagar", "east boxnagar"] },
+  { en: "Paikpara", bn: "পাইকপাড়া" },
+  { en: "Rani Mahal", bn: "রানী মহল", alias: ["ranimahal"] },
+  { en: "Dakshingaon", bn: "দক্ষিণগাঁও", alias: ["dakshin gaon"] },
+  { en: "Trimohoni", bn: "ত্রিমোহনী" },
+  { en: "Borobhanga", bn: "বড়ভাঙ্গা", alias: ["barabhanga", "boro bhanga"] },
+  { en: "Hajinagar", bn: "হাজীনগর", alias: ["haji nagar", "hazinagar"] },
+  { en: "Rasulnagar", bn: "রসুলনগর", alias: ["rasul nagar"] },
+  { en: "Madaninagar", bn: "মাদানীনগর", alias: ["madani nagar"] },
+  { en: "Sanarpara", bn: "সানারপাড়া", alias: ["sanar para"] },
+  { en: "Dania", bn: "দনিয়া" },
+  { en: "Shonir Akhra", bn: "শনির আখড়া", alias: ["sonir akhra"] },
+  { en: "Jatrabari", bn: "যাত্রাবাড়ী" },
+  { en: "Shyampur", bn: "শ্যামপুর" },
+  { en: "Kadamtali", bn: "কদমতলী" },
 ];
+window.BAZARKORI_AREAS = AREAS.map(a => a.en);
+const AREA_MATCHERS = AREAS.map(a => [a.en.toLowerCase(), a.bn, ...(a.alias || []).map(s => s.toLowerCase())]);
+// ADDRESS (relaxed v34 — Tamim, 24 Nov ~17:11): a real, usable delivery
+// address inside the delivery area — minimum 8 characters, at least one
+// letter (Bangla or Latin), and must name one of the delivery areas
+// (Bangla or English/Romanized). House/road numbers are OPTIONAL — the
+// customer just writes the location they want delivery from. Gibberish
+// (one character repeated, too short, no area) is rejected.
+// Returns {ok:true} or {ok:false, error}.
+const ADDRESS_ERR = "সঠিক ঠিকানা দিন — আপনার এলাকার নামসহ ঠিকানাটি লিখুন (যেমন: কোনাপাড়া, আলামিন রোড, ডেমরা)";
 function validateAddress(addr) {
   const a = String(addr || "").trim();
-  if (a.length < 12) return { ok: false, error: ADDRESS_ERR };
-  if (!/[0-9০-৯]/.test(a)) return { ok: false, error: ADDRESS_ERR }; // needs a house/road number
+  if (a.length < 8) return { ok: false, error: ADDRESS_ERR };
   if (!/[a-zA-Z\u0980-\u09ff]/.test(a)) return { ok: false, error: ADDRESS_ERR }; // needs letters too
   const chars = a.replace(/[\s,.\-#/]/g, "");
   if (chars.length && [...new Set(chars.toLowerCase())].length <= 1) return { ok: false, error: ADDRESS_ERR }; // "aaaaaaa…"
@@ -487,14 +527,14 @@ function openAuth() {
 const CUSTOMER_TERMS_HTML = `<div class="terms-box">
   <b>কাস্টমার শর্তাবলি — অনুগ্রহ করে পড়ে নিন</b>
   <ul>
-    <li>📍 ডেলিভারি এলাকা: Demra Thana + আশেপাশের এলাকা (Demra, Sarulia, Matuail, Konapara, Staff Quarter, Jatrabari, Shyampur, Kadamtali)।</li>
+    <li>📍 ডেলিভারি এলাকা: Demra Thana + আশেপাশের এলাকা (${window.BAZARKORI_AREAS.join(", ")})।</li>
     <li>🚚 ডেলিভারি চার্জ: ৫ কেজি পর্যন্ত ফ্ল্যাট ৳৩০। ৫ কেজির বেশি হলে প্রতি অতিরিক্ত কেজি ৳৫ করে বাড়বে।</li>
     <li>⏱️ রাইডার কনফার্মের পর ২৫ মিনিটে ডেলিভারি।</li>
     <li>💵 পেমেন্ট: Cash on Delivery — পণ্য হাতে পেয়ে তারপর টাকা দিন।</li>
     <li>🏷️ সব পণ্য MRP দামে — কোনো ডিসকাউন্ট বা লুকানো চার্জ নেই।</li>
     <li>🛎️ সার্ভিস চার্জ: প্রতি পণ্যে ৳৫ (MRP-র উপরে) — এই চার্জে আমরা অর্ডার, রাইডার আর ডেলিভারি সাজিয়ে দিই।</li>
     <li>📧 রেজিস্ট্রেশনের সময় আপনার ইমেইলে ৬ সংখ্যার ভেরিফিকেশন কোড যাবে (bazarkori.shop.bd@gmail.com থেকে) — কোডটি বসালেই অ্যাকাউন্ট চালু হবে।</li>
-    <li>📱 সঠিক মোবাইল নম্বর (১১ ডিজিট) আর বাড়ি/রোড নম্বরসহ পুরো ঠিকানা দিতে হবে — ভুল নম্বর/ঠিকানায় অর্ডার নেওয়া হবে না। রাইডার পণ্য কেনার আগে আপনাকে কল করে কনফার্ম করবে যে অর্ডারটা নিবেন কিনা।</li>
+    <li>📱 সঠিক মোবাইল নম্বর (১১ ডিজিট) আর আপনার এলাকার নামসহ ঠিকানা দিতে হবে — বাড়ি/রোড নম্বর দিলে ভালো, না দিলেও চলবে। ভুল নম্বর/ঠিকানায় অর্ডার নেওয়া হবে না। রাইডার পণ্য কেনার আগে আপনাকে কল করে কনফার্ম করবে যে অর্ডারটা নিবেন কিনা।</li>
     <li>🕛 খোলা: রাত ১২টা পর্যন্ত।</li>
   </ul>
 </div>`;
@@ -1327,10 +1367,62 @@ function renderCart() {
   <label>Full Address</label><input id="coAddr" placeholder="House, road, area" value="${esc(dAddr)}"><label>Your Name</label><input id="coName" placeholder="Name" value="${esc(dName)}"><label>Phone</label><input id="coPhone" placeholder="01XXXXXXXXX" value="${esc(dPhone)}">
   <button class="btn" style="width:100%;margin-top:8px" onclick="placeOrder()">Place Order — Cash on Delivery</button>` : "";
 }
+// ---------- Order codes + order identity (v34) ----------
+// BUG (proven live 24 Nov ~17:21): createOrder() assigned the code from the
+// LOCAL-only max, so every fresh browser restarted at LN-1001. A customer
+// on a new phone got the same code as an existing order — and the Supabase
+// insert then failed on the UNIQUE order_code constraint, so the rider pool
+// on Tamim's PC never saw the new order at all. Fix: ask the server for
+// its max code first (short timeout, local fallback on failure).
+// Orders are keyed by a stable unique key, not by code alone: the Supabase
+// row id (sbId) when the row has been merged, else code + created time.
+// Two rows that share a code must both stay visible in the pool/admin
+// lists, and customer tracking must prefer the customer's OWN order.
+function codeNum(code) { const m = /^LN-(\d+)$/.exec(code || ""); return m ? Number(m[1]) : 0; }
+let _lastIssuedCodeNum = 0;
+function fetchServerMaxCode() {
+  // Highest order_code number on Supabase, or null when unreachable.
+  // 3s timeout — a slow network must never block checkout.
+  if (!LIVE || !sb) return Promise.resolve(null);
+  const timeout = new Promise(res => setTimeout(() => res(null), 3000));
+  const q = sb.from("orders").select("order_code").limit(500)
+    .then(({ data, error }) => {
+      if (error || !Array.isArray(data) || !data.length) return null;
+      return Math.max(0, ...data.map(r => codeNum(r.order_code)));
+    }).catch(() => null);
+  return Promise.race([q, timeout]);
+}
+function orderKey(o) { return (o && o.sbId) || ((o && o.code) + "|" + ((o && o.created) || "")); }
+function findInList(list, key) {
+  // Exact row lookup inside ONE array instance (handlers mutate the found
+  // row, then save that same array — so the lookup must not re-parse).
+  if (!key) return null;
+  return (list || []).find(x => x.sbId && x.sbId === key) || (list || []).find(x => x.code === key) || (list || []).find(x => orderKey(x) === key) || null;
+}
+function findOrderByKey(key) { return findInList(orders(), key); }
+function findInListFor(list, code, phone) {
+  // Same as findOrderFor, but inside ONE array instance (handlers mutate
+  // the found row, then save that same array).
+  const twins = (list || []).filter(x => x.code === code)
+    .sort((a, b) => new Date(b.created || 0) - new Date(a.created || 0));
+  if (!twins.length) return null;
+  if (phone) { const mine = twins.find(x => x.phone === phone); if (mine) return mine; }
+  return twins[0];
+}
+function findOrderFor(code, phone) {
+  // Customer tracking by code: with duplicate codes, prefer the customer's
+  // OWN order (same phone), newest first.
+  return findInListFor(orders(), code, phone);
+}
+function isUniqueViolation(err) {
+  if (!err) return false;
+  const m = ((err.message || "") + " " + (err.code || "")).toLowerCase();
+  return m.includes("23505") || m.includes("duplicate key") || m.includes("unique constraint");
+}
 // ---------- Shared order creation (v20) ----------
 // Used by the cart page AND the cart popup — one code path, one order code
 // sequence, so the two can never drift apart.
-function createOrder(name, phone, addr, area) {
+async function createOrder(name, phone, addr, area) {
   const s = session();
   const c = cart(); if (!c.length) return null;
   // Remember what the customer used at checkout, so next time it auto-fills.
@@ -1338,18 +1430,25 @@ function createOrder(name, phone, addr, area) {
   const sub = cartSellSub(c); // MRP + ৳5 service per unit (v24)
   const svc = serviceFeeFor(c);
   const fb = feeBreakdown(c); // weight-based delivery fee (v23)
-  // v19: unique order code from the highest existing one. Length-based
-  // codes could collide after the v19 demo-order cleanup shrank the list
-  // (e.g. 6 real orders left → next code would repeat an existing one).
-  const nextNum = Math.max(1000, ...orders().map(o => { const m = /^LN-(\d+)$/.exec(o.code || ""); return m ? Number(m[1]) : 0; })) + 1;
+  // v34: code from max(LOCAL max, SERVER max) + 1 — a fresh browser must
+  // never restart at LN-1001 (see the v34 note above). _lastIssuedCodeNum
+  // keeps two rapid creates in this tab sequential too.
+  const serverMax = await fetchServerMaxCode();
+  const localMax = Math.max(1000, ...orders().map(o => codeNum(o.code)));
+  const nextNum = Math.max(localMax, serverMax || 0, _lastIssuedCodeNum) + 1;
+  _lastIssuedCodeNum = nextNum;
   const o = { code: "LN-" + nextNum, customer: name, phone, area, address: addr, items: c, subtotal: sub, mrpSubtotal: sub - svc, serviceFee: svc, fee: fb.fee, weightKg: Math.round(fb.weightKg * 100) / 100, total: sub + fb.fee, status: "placed", statusLog: { placed: new Date().toISOString() }, rider: "", created: new Date().toISOString(), date: todayStr() };
   const all = orders(); all.unshift(o); setOrders(all); setCart([]);
   notify("Order " + o.code + " placed! Broadcasting to online riders…");
   emailOrderNotify(o); // fire-and-forget; admin badge/sound above still fires regardless
-  insertOrderToSupabase(o); // v33: full row (falls back to the v1–v32 column set pre-migration)
+  // v34: await the insert — on a unique-violation race it reassigns a fresh
+  // code and updates the saved local row; the returned order carries the
+  // final code, so the tracking popup opens with the right one.
+  const finalCode = await insertOrderToSupabase(o);
+  if (finalCode && finalCode !== o.code) o.code = finalCode;
   return o;
 }
-function placeOrder() {
+async function placeOrder() {
   const s = requireLogin("customer"); if (!s) return;
   const c = cart(); if (!c.length) return toast("Cart is empty.");
   const name = $("#coName").value.trim() || s.name, phoneRaw = $("#coPhone").value.trim() || s.phone, addr = $("#coAddr").value.trim(), area = $("#coArea").value;
@@ -1360,7 +1459,7 @@ function placeOrder() {
   if (!phone) return toast(PHONE_ERR);
   const av = validateAddress(addr);
   if (!av.ok) return toast(av.error);
-  const o = createOrder(name, phone, addr, area); if (!o) return;
+  const o = await createOrder(name, phone, addr, area); if (!o) return;
   renderCart(); renderAll();
   openTrackPopup(o.code, { justPlaced: true }); // animated tracking popup, right here — no navigation yet
 }
@@ -1409,7 +1508,7 @@ function addCustomItemPopup() {
   const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, mrp: 0, qty: 1, img: "" }); setCart(c);
   inp.value = ""; renderCart(); renderCartPopup(); toast("Custom item added — we will confirm its price.");
 }
-function placeOrderPopup() {
+async function placeOrderPopup() {
   const s = requireLogin("customer"); if (!s) return;
   const c = cart(); if (!c.length) return toast("Cart is empty.");
   const name = ($("#pCoName") && $("#pCoName").value.trim()) || s.name;
@@ -1423,7 +1522,7 @@ function placeOrderPopup() {
   if (!phone) return toast(PHONE_ERR);
   const av = validateAddress(addr);
   if (!av.ok) return toast(av.error);
-  const o = createOrder(name, phone, addr, area); if (!o) return;
+  const o = await createOrder(name, phone, addr, area); if (!o) return;
   renderCart(); closeModal();
   openTrackPopup(o.code, { justPlaced: true }); // animated tracking popup, right here — no navigation yet
 }
@@ -1491,12 +1590,12 @@ function syncOrderFull(o) {
     // Persist the dirty mark on the SAVED row (re-read + save — the
     // caller's in-memory object is not the saved copy).
     try {
-      const all = orders(); const ex = all.find(x => x.code === o.code);
+      const all = orders(); const ex = all.find(x => orderKey(x) === orderKey(o));
       if (ex) { ex._syncPending = Date.now(); setOrders(all); }
     } catch {}
     const clearPending = () => {
       try {
-        const all = orders(); const ex = all.find(x => x.code === o.code);
+        const all = orders(); const ex = all.find(x => orderKey(x) === orderKey(o));
         if (ex) { delete ex._syncPending; setOrders(all); }
       } catch {}
     };
@@ -1510,36 +1609,62 @@ function syncOrderFull(o) {
       }).catch(() => clearPending());
   } catch (e) {}
 }
-function insertOrderToSupabase(o) {
+async function insertOrderToSupabase(o) {
   // createOrder's insert, with the same graceful fallback: full row first,
   // minimal row (the v1–v32 column set) if the migration hasn't run yet.
-  if (!LIVE || !sb) return;
-  const full = {
-    order_code: o.code, customer_name: o.customer, customer_phone: o.phone,
-    delivery_address: o.address, area: o.area, items: o.items || [],
-    subtotal_bdt: o.subtotal, delivery_fee_bdt: o.fee, total_bdt: o.total,
-    status: o.status, rider_name: o.rider || null,
-    status_log: o.statusLog || { placed: o.created },
-    call_confirmed_at: o.callConfirmedAt || null,
-    cancel_history: o.cancelHistory || [], declined_by: o.declinedBy || [],
-    cancelled_by: o.cancelledBy || null, cancel_reason: o.cancelReason || null,
-    cancel_note: o.cancelNote || null, cancelled_at: o.cancelledAt || null,
-    service_fee_bdt: o.serviceFee || 0, mrp_subtotal_bdt: o.mrpSubtotal || 0,
-    weight_kg: o.weightKg || 0
-  };
-  const minimal = {
-    order_code: o.code, customer_name: o.customer, customer_phone: o.phone,
-    delivery_address: o.address, area: o.area, items: o.items || [],
-    subtotal_bdt: o.subtotal, delivery_fee_bdt: o.fee, total_bdt: o.total, status: "placed"
-  };
-  try {
-    sb.from("orders").insert([full]).then(({ error }) => {
-      if (error && isMissingColumnError(error) && _sbFullCols) {
+  // Returns the code the order ended up with on the server (usually
+  // o.code). v34: on a UNIQUE-VIOLATION race (two customers fetched the
+  // same server max at the same instant and both tried the same code),
+  // reassigns a fresh code from the server max, updates the saved local
+  // row, and retries once — the order is never silently lost.
+  if (!LIVE || !sb) return o.code;
+  const build = code => ({
+    full: {
+      order_code: code, customer_name: o.customer, customer_phone: o.phone,
+      delivery_address: o.address, area: o.area, items: o.items || [],
+      subtotal_bdt: o.subtotal, delivery_fee_bdt: o.fee, total_bdt: o.total,
+      status: o.status, rider_name: o.rider || null,
+      status_log: o.statusLog || { placed: o.created },
+      call_confirmed_at: o.callConfirmedAt || null,
+      cancel_history: o.cancelHistory || [], declined_by: o.declinedBy || [],
+      cancelled_by: o.cancelledBy || null, cancel_reason: o.cancelReason || null,
+      cancel_note: o.cancelNote || null, cancelled_at: o.cancelledAt || null,
+      service_fee_bdt: o.serviceFee || 0, mrp_subtotal_bdt: o.mrpSubtotal || 0,
+      weight_kg: o.weightKg || 0
+    },
+    minimal: {
+      order_code: code, customer_name: o.customer, customer_phone: o.phone,
+      delivery_address: o.address, area: o.area, items: o.items || [],
+      subtotal_bdt: o.subtotal, delivery_fee_bdt: o.fee, total_bdt: o.total, status: "placed"
+    }
+  });
+  let code = o.code;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const p = build(code);
+    try {
+      const { error } = await sb.from("orders").insert([p.full]);
+      if (!error) return code;
+      if (isMissingColumnError(error) && _sbFullCols) {
         _sbFullCols = false;
-        sb.from("orders").insert([minimal]).then(() => {}).catch(() => {});
+        const r2 = await sb.from("orders").insert([p.minimal]);
+        if (!r2.error) return code;
+        if (!isUniqueViolation(r2.error)) return code;
+      } else if (!isUniqueViolation(error)) {
+        return code; // some other error — keep the local code, stay local-only
       }
-    }).catch(() => {});
-  } catch (e) {}
+      // Unique violation: someone else took this code first. Reassign.
+      const max = await fetchServerMaxCode();
+      const next = Math.max(max || 0, codeNum(code), _lastIssuedCodeNum) + 1;
+      _lastIssuedCodeNum = next;
+      const newCode = "LN-" + next;
+      try {
+        const all = orders(); const ex = all.find(x => x.code === code && x.created === o.created);
+        if (ex) { ex.code = newCode; setOrders(all); }
+      } catch {}
+      o.code = newCode; code = newCode;
+    } catch (e) { return code; }
+  }
+  return code;
 }
 async function claimOrderSb(o, meName) {
   // First Accept wins, enforced SERVER-side: the conditional update only
@@ -1566,13 +1691,16 @@ async function claimOrderSb(o, meName) {
 function sbRowToOrder(r, ex) {
   // One Supabase orders row → one local order, merged with the local copy
   // (ex) so nothing the local browser knows is lost when the remote row
-  // lacks the v33 columns (pre-migration) or a field.
+  // lacks the v33 columns (pre-migration) or a field. sbId is the
+  // Supabase row id — the stable unique key for this order (see the v34
+  // note above createOrder); two rows sharing a code stay separate.
   const remoteLog = (r.status_log && typeof r.status_log === "object") ? r.status_log : {};
   const log = Object.assign({}, ex && ex.statusLog, remoteLog);
   if (!log.placed && r.created_at) log.placed = r.created_at;
   if (r.delivered_at) log.delivered = r.delivered_at;
   const union = (a, b) => Array.from(new Set([...(a || []), ...(b || [])]));
-  return {
+  const ord = {
+    sbId: r.id || (ex && ex.sbId) || null,
     code: r.order_code, customer: r.customer_name, phone: r.customer_phone,
     area: r.area, address: r.delivery_address, items: r.items || (ex && ex.items) || [],
     subtotal: r.subtotal_bdt, mrpSubtotal: (r.mrp_subtotal_bdt != null ? r.mrp_subtotal_bdt : (ex && ex.mrpSubtotal)),
@@ -1590,6 +1718,19 @@ function sbRowToOrder(r, ex) {
     cancelledAt: r.cancelled_at || (ex && ex.cancelledAt) || null,
     created: r.created_at, date: (r.created_at || "").slice(0, 10)
   };
+  // v34 (Bug 2): pre-migration Supabase rows were BACKFILLED with 0 when
+  // the v33 columns were added (ALTER TABLE … DEFAULT 0), so old orders
+  // carry mrp_subtotal_bdt = 0, service_fee_bdt = 0, weight_kg = 0 even
+  // though their items are correct. A stored 0 here is never real (a real
+  // order always has units and usually weight), so recompute from the
+  // items: MRP from item mrp/price, service ৳5 × units, weight via
+  // itemKg() parsing. A truly weightless / all-custom order recomputes
+  // to the same 0, so this can never inflate a number.
+  const items = ord.items || [];
+  if (!(ord.mrpSubtotal > 0)) ord.mrpSubtotal = items.reduce((s, i) => s + itemMrp(i) * (i.qty || 1), 0);
+  if (!(ord.serviceFee > 0)) ord.serviceFee = 5 * items.reduce((s, i) => s + (i.qty || 1), 0);
+  if (!(ord.weightKg > 0)) ord.weightKg = Math.round(cartWeightKg(items) * 100) / 100;
+  return ord;
 }
 
 // ---------- Live countdown tracking (v9) ----------
@@ -1659,7 +1800,8 @@ function trackerHTML(o) {
 }
 function renderTrackPopup() {
   if (!trackCode) return;
-  const o = orders().find(x => x.code === trackCode);
+  // v34: with duplicate codes, show the CUSTOMER's own order (same phone).
+  const o = findOrderFor(trackCode, (session() || {}).phone);
   if (!o) { $("#modalBody").innerHTML = "<p>অর্ডারটি পাওয়া যায়নি।</p>"; return; }
   $("#modal").setAttribute("data-track-status", o.status);
   const t = timerDisplay(o);
@@ -1667,7 +1809,7 @@ function renderTrackPopup() {
   $("#modalBody").innerHTML = `<div class="track-pop">
   ${trackJustPlaced ? `<div class="placed-check">✓</div><h2 style="margin:4px 0 0">অর্ডার কনফার্ম হয়েছে! 🎉</h2><p class="muted" style="margin:4px 0 0">অর্ডার নম্বর: <b>${o.code}</b> — রাইডার খুঁজছি…</p>` : `<h2 style="margin-top:0">📍 লাইভ ট্র্যাক — ${o.code}</h2>`}
   <p class="muted">${fmt(o.total)} • ${esc(o.area)} • ${esc(o.address || "")}</p>
-  <p class="muted">⚖️ মোট ওজন: ${fmtKg(o.weightKg != null ? o.weightKg : cartWeightKg(o.items))} • ডেলিভারি চার্জ ${fmt(orderFee(o))}</p>
+  <p class="muted">⚖️ মোট ওজন: ${fmtKg((o.weightKg != null && o.weightKg > 0) ? o.weightKg : cartWeightKg(o.items))} • ডেলিভারি চার্জ ${fmt(orderFee(o))}</p>
   ${o.status === "cancelled" ? `<p class="area-warn">❌ এই অর্ডারটি ক্যানসেল করা হয়েছে।</p>` : trackerHTML(o)}
   ${o.callConfirmedAt ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(o.callConfirmedAt)}</p>` : ""}
   ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (${esc(lastCancelText(o))})</p>` : ""}
@@ -1684,7 +1826,9 @@ function updateCountdowns() {
   // The popup itself is re-rendered by the tick below.
   try {
     document.querySelectorAll(".js-countdown").forEach(el => {
-      const o = orders().find(x => x.code === el.getAttribute("data-code"));
+      // v34: rows are keyed by their unique key (sbId when merged, else
+      // code) so twin orders sharing a code each show their own timer.
+      const o = findOrderByKey(el.getAttribute("data-key")) || orders().find(x => x.code === el.getAttribute("data-code"));
       if (!o) return;
       el.textContent = timerDisplay(o).big;
     });
@@ -1771,11 +1915,20 @@ function fileToData(input, cb) { const f = input.files && input.files[0]; if (!f
 // v33: money breakdown shown to the rider BEFORE Accept (spec §1): the
 // rider buys with his own money, so he sees the full product cost first.
 function orderMoney(o) {
-  const qty = (o.items || []).reduce((s, i) => s + (i.qty || 0), 0);
-  const mrp = o.mrpSubtotal != null ? o.mrpSubtotal : (o.subtotal - 5 * qty);
-  const svc = o.serviceFee != null ? o.serviceFee : 5 * qty;
-  const w = o.weightKg || 0;
-  return { qty, mrp, svc, w, fee: o.fee || 0, subtotal: o.subtotal || 0, total: o.total || 0 };
+  // v34 (Bug 2): old orders carry mrpSubtotal/serviceFee/weightKg = 0
+  // (backfilled 0s — see sbRowToOrder). A stored 0 is never real for an
+  // order with items, so recompute from the items whenever the stored
+  // value is missing OR zero. A truly weightless / all-custom order
+  // recomputes to the same 0, so this can never inflate a number.
+  const items = o.items || [];
+  const qty = items.reduce((s, i) => s + (i.qty || 0), 0);
+  const mrpItems = items.reduce((s, i) => s + itemMrp(i) * (i.qty || 1), 0);
+  const mrp = (o.mrpSubtotal != null && o.mrpSubtotal > 0) ? o.mrpSubtotal : mrpItems;
+  const svc = (o.serviceFee != null && o.serviceFee > 0) ? o.serviceFee : 5 * qty;
+  const w = (o.weightKg != null && o.weightKg > 0) ? o.weightKg : cartWeightKg(items);
+  const subtotal = o.subtotal != null ? o.subtotal : mrp + svc;
+  const total = o.total != null ? o.total : subtotal + (o.fee || 0);
+  return { qty, mrp, svc, w, fee: o.fee || 0, subtotal, total };
 }
 function orderMoneyHTML(o) {
   const m = orderMoney(o);
@@ -1795,7 +1948,7 @@ function riderOrderPreviewHTML(o) {
     <div class="r-order-addr">📍 ${esc(o.address)}</div>
     <div class="r-order-items">${o.items.map(i => `<div class="r-item"><span>${esc(i.name)}</span><span>× ${i.qty}</span><b>${fmt(i.price * i.qty)}</b></div>`).join("")}</div>
     ${orderMoneyHTML(o)}
-    <button class="btn gold r-accept" onclick="acceptOrder('${o.code}')">✅ Accept — আমি ডেলিভারি করব</button>
+    <button class="btn gold r-accept" onclick="acceptOrder('${o.sbId || o.code}')">✅ Accept — আমি ডেলিভারি করব</button>
   </div>`;
 }
 // Codes the rider has already been alerted about in this page session
@@ -1820,11 +1973,13 @@ function renderRider() {
   // v33: new-order alert — any placed order in my areas I have not been
   // alerted about yet in this page session → banner + one beep. The
   // banner stays while fresh (placed < 5 min ago) orders wait in the pool.
-  const unseenPool = pool.filter(o => !_riderSeenPool.has(o.code));
-  if (unseenPool.length && me.verified && !me.banned && me.online) { unseenPool.forEach(o => _riderSeenPool.add(o.code)); beep(); }
+  // v34: keyed by the unique order key, not the code — twin orders sharing
+  // a code must each alert once.
+  const unseenPool = pool.filter(o => !_riderSeenPool.has(orderKey(o)));
+  if (unseenPool.length && me.verified && !me.banned && me.online) { unseenPool.forEach(o => _riderSeenPool.add(orderKey(o))); beep(); }
   const freshPool = pool.filter(o => (Date.now() - new Date(o.created).getTime()) < 5 * 60 * 1000);
   const newAlert = (me.verified && !me.banned && me.online && freshPool.length)
-    ? `<div class="r-new-alert">🔔 নতুন অর্ডার এসেছে! ${freshPool.map(o => o.code).join(", ")} — নিচে দেখুন, প্রথমে Accept করলেই অর্ডারটি আপনার।</div>` : "";
+    ? `<div class="r-new-alert">🔔 নতুন অর্ডার এসেছে! ${[...new Set(freshPool.map(o => o.code))].join(", ")} — নিচে দেখুন, প্রথমে Accept করলেই অর্ডারটি আপনার।</div>` : "";
   el.innerHTML = `
   <p><b>${esc(me.name)}</b> • ${esc(me.phone)} • ${esc(me.area)} •
   <span class="pill ${me.banned ? "bad" : me.verified ? "ok" : "warn"}">${me.banned ? "OFF / Banned" : me.verified ? "Verified Rider" : "Not Verified — " + me.vstatus}</span>
@@ -1867,13 +2022,13 @@ function renderRider() {
       <b>📞 কাস্টমারকে কল করুন</b><br>
       <span class="muted">কল দিয়ে কনফার্ম করুন — উনি অর্ডারটা নিবেন কিনা। কল আপনার নিজের সিম থেকে যাবে।</span><br>
       <a class="btn gold" style="display:inline-block;margin-top:8px;text-decoration:none" href="tel:${esc(o.phone)}">📞 ${esc(o.phone)} — কল করুন</a>
-      <button class="btn" style="margin-top:8px" onclick="confirmCall('${o.code}')">✅ কাস্টমার কনফার্ম করেছে</button>
+      <button class="btn" style="margin-top:8px" onclick="confirmCall('${o.sbId || o.code}')">✅ কাস্টমার কনফার্ম করেছে</button>
       <p class="muted">কাস্টমার না নিলে নিচে "অর্ডার ক্যানসেল করুন" চাপুন — পণ্য কিনবেন না।</p></div>` : "";
     const callDoneLine = o.callConfirmedAt ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(o.callConfirmedAt)}</p>` : "";
     // v25 cancel: visible after Accept, any time before delivery.
-    const cancelBtn = o.status !== "delivered" ? `<button class="btn danger" style="width:100%;margin-top:6px" onclick="askCancel('${o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : "";
+    const cancelBtn = o.status !== "delivered" ? `<button class="btn danger" style="width:100%;margin-top:6px" onclick="askCancel('${o.sbId || o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : "";
     return `<div class="panel"><b>${o.code}</b> — ${STATUS_BN[o.status]} • ${fmt(o.total)} • ${esc(o.address)}<br>
-    <div class="track-mini ${td.cls}">⏱ <span class="js-countdown" data-code="${o.code}">${td.big}</span> <span class="muted">${td.sub}</span></div>
+    <div class="track-mini ${td.cls}">⏱ <span class="js-countdown" data-key="${esc(o.sbId || o.code)}">${td.big}</span> <span class="muted">${td.sub}</span></div>
     <span class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")} • ${esc(o.customer)} (${esc(o.phone)})</span>
     ${orderMoneyHTML(o)}
     ${callDoneLine}
@@ -1882,7 +2037,7 @@ function renderRider() {
       return `<div class="statusstep ${si < idx ? "done" : si === idx ? "now" : ""}">${si < idx ? "✓ " : ""}${STATUS_BN[st]}${log[st] ? `<br><span class="muted">${fmtTime(log[st])}</span>` : ""}</div>`;
     }).join("")}</div>
     ${callBlock}
-    ${next && !needsCall ? `<button class="status-btn" onclick="setStatus('${o.code}','${next}')">${NEXT_BTN[next]}</button>` : ""}
+    ${next && !needsCall ? `<button class="status-btn" onclick="setStatus('${o.sbId || o.code}','${next}')">${NEXT_BTN[next]}</button>` : ""}
     ${cancelBtn}
     <p class="muted">এক ধাপ করে আপডেট করুন — কাস্টমার তার ফোনে সাথে সাথে দেখতে পাবে।</p></div>`;
   }).join("") : "<p>এখনো কোনো ডেলিভারি নেই।</p>"}
@@ -1910,7 +2065,7 @@ function toggleOnline() {
 }
 async function acceptOrder(code) {
   const s = session(); if (!s) return;
-  const all = orders(); const o = all.find(x => x.code === code);
+  const all = orders(); const o = findInList(all, code);
   if (!o || o.status !== "placed") return toast("Too late — another rider already accepted this order.");
   // v25: a rider who cancelled this order can never take it again.
   if ((o.declinedBy || []).includes(s.name)) return toast("আপনি এই অর্ডারটি ক্যানসেল করেছেন — আর নিতে পারবেন না।");
@@ -1926,7 +2081,7 @@ async function acceptOrder(code) {
   }
   recordStatus(o, "accepted"); o.rider = s.name;
   o.callConfirmedAt = null; // fresh accept → the rider must call + confirm first (v25)
-  setOrders(all); syncOrderFull(o); renderAll(); notify("You accepted " + code + ". কাস্টমারকে কল করে কনফার্ম করুন — তারপর পণ্য কিনুন।");
+  setOrders(all); syncOrderFull(o); renderAll(); notify("You accepted " + o.code + ". কাস্টমারকে কল করে কনফার্ম করুন — তারপর পণ্য কিনুন।");
 }
 // ---------- Rider call-to-confirm + cancel (v25) ----------
 // Tamim (24 Nov ~11:30–11:31, rider-app-spec.md §4): after Accept the rider
@@ -1949,20 +2104,20 @@ function lastCancelText(o) {
 function confirmCall(code) {
   // Rider tapped "✅ কাস্টমার কনফার্ম করেছে" after calling the customer.
   const s = session(); if (!s || s.role !== "rider") return toast("Login as a rider first.");
-  const all = orders(); const o = all.find(x => x.code === code); if (!o) return;
+  const all = orders(); const o = findInList(all, code); if (!o) return;
   if (o.rider !== s.name) return toast("This order is not yours.");
   if (o.status !== "accepted") return toast("এই ধাপে আর কল-কনফার্ম লাগবে না।");
   const now = new Date().toISOString();
   o.callConfirmedAt = now;
   o.statusLog = Object.assign({}, o.statusLog, { callConfirmed: now });
-  setOrders(all); syncOrderFull(o); renderAll(); notify(code + " — কাস্টমার কনফার্ম করেছে। এখন পণ্য কিনুন।");
+  setOrders(all); syncOrderFull(o); renderAll(); notify(o.code + " — কাস্টমার কনফার্ম করেছে। এখন পণ্য কিনুন।");
 }
 function askCancel(code) {
   // Reason picker (modal) — a cancel without a reason is not allowed.
-  const o = orders().find(x => x.code === code); if (!o) return;
+  const o = findOrderByKey(code); if (!o) return;
   openModal(`<div class="pop">
     <button class="pop-close" onclick="closeModal()" aria-label="Close">✕</button>
-    <h2>❌ অর্ডার ক্যানসেল করুন — ${esc(code)}</h2>
+    <h2>❌ অর্ডার ক্যানসেল করুন — ${esc(o.code)}</h2>
     <p class="muted">অর্ডারটি আবার অন্য রাইডারদের কাছে যাবে। আপনি এই অর্ডারটি আর নিতে পারবেন না।</p>
     <label>ক্যানসেলের কারণ (আবশ্যক)</label>
     ${CANCEL_REASONS.map((r, i) => `<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="radio" name="cancelReason" value="${esc(r)}" style="width:auto" ${i === 0 ? "checked" : ""}> <span>${esc(r)}</span></label>`).join("")}
@@ -1985,7 +2140,7 @@ function confirmCancel(code) {
 }
 function cancelOrder(code, reason, note) {
   const s = session(); if (!s || s.role !== "rider") return toast("Login as a rider first.");
-  const all = orders(); const o = all.find(x => x.code === code); if (!o) return;
+  const all = orders(); const o = findInList(all, code); if (!o) return;
   if (o.rider !== s.name) return toast("This order is not yours.");
   if (o.status === "delivered" || o.status === "placed") return toast("এই অর্ডারটি আর ক্যানসেল করা যাবে না।");
   if (!reason) return toast("ক্যানসেলের কারণ বেছে নিন।");
@@ -2004,7 +2159,7 @@ function cancelOrder(code, reason, note) {
   delete o.statusLog.picked_up; delete o.statusLog.on_the_way; delete o.statusLog.delivered;
   o.status = "placed";
   setOrders(all); syncOrderStatus(o); renderAll();
-  notify(code + " ক্যানসেল হয়েছে — নতুন রাইডার খুঁজছি…");
+  notify(o.code + " ক্যানসেল হয়েছে — নতুন রাইডার খুঁজছি…");
 }
 // ---------- Customer cancel (v28) ----------
 // Tamim (24 Nov ~12:40): the customer can cancel until the rider marks
@@ -2014,18 +2169,19 @@ function cancelOrder(code, reason, note) {
 // === "placed"), never counts in totals (only delivered counts), and the
 // rider sees it vanish from "My Active Deliveries" (+ a notice line).
 function askCustomerCancel(code) {
-  const o = orders().find(x => x.code === code); if (!o) return;
+  // v34: with duplicate codes, the modal must describe the CUSTOMER's own order.
+  const o = findOrderFor(code, (session() || {}).phone); if (!o) return;
   if (o.status !== "placed" && o.status !== "accepted") return toast("রাইডার পণ্য কিনে ফেলেছে — এখন আর ক্যানসেল করা যাবে না।");
   openModal(`<div class="pop">
     <button class="pop-close" onclick="closeModal()" aria-label="Close">✕</button>
     <h2>❌ অর্ডার ক্যানসেল করবেন?</h2>
-    <p>অর্ডার <b>${esc(code)}</b> (${fmt(o.total)}) ক্যানসেল হয়ে যাবে। রাইডার এখনো পণ্য কেনেনি, তাই এখনো ক্যানসেল করা যাচ্ছে।</p>
+    <p>অর্ডার <b>${esc(o.code)}</b> (${fmt(o.total)}) ক্যানসেল হয়ে যাবে। রাইডার এখনো পণ্য কেনেনি, তাই এখনো ক্যানসেল করা যাচ্ছে।</p>
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn danger" onclick="cancelOrderByCustomer('${code}')">হ্যাঁ, ক্যানসেল করুন</button><button class="btn ghost" onclick="closeModal()">ফিরে যান</button></div>
   </div>`);
 }
 function cancelOrderByCustomer(code) {
   const s = session(); if (!s) return;
-  const all = orders(); const o = all.find(x => x.code === code); if (!o) return;
+  const all = orders(); const o = findInListFor(all, code, s.phone); if (!o) return;
   if (o.phone !== s.phone && o.customer !== s.name) return toast("এই অর্ডারটি আপনার নয়।");
   if (o.status !== "placed" && o.status !== "accepted") return toast("রাইডার পণ্য কিনে ফেলেছে — এখন আর ক্যানসেল করা যাবে না।");
   closeModal();
@@ -2033,20 +2189,20 @@ function cancelOrderByCustomer(code) {
   o.status = "cancelled"; o.cancelledBy = "customer"; o.cancelledAt = now;
   o.statusLog = Object.assign({}, o.statusLog, { cancelled: now });
   setOrders(all); syncOrderStatus(o); renderAll();
-  notify(code + " ক্যানসেল হয়েছে।");
+  notify(o.code + " ক্যানসেল হয়েছে।");
 }
 function setStatus(code, st) {
   // v7 guard: only the rider who accepted this order, and only the NEXT step —
   // a rider can never skip a step (e.g. delivered before on the way).
   const s = session(); if (!s || s.role !== "rider") return toast("Login as a rider first.");
-  const all = orders(); const o = all.find(x => x.code === code); if (!o) return;
+  const all = orders(); const o = findInList(all, code); if (!o) return;
   if (o.rider !== s.name) return toast("This order is not yours.");
   const expected = STATUS_FLOW[STATUS_FLOW.indexOf(o.status) + 1];
   if (st !== expected) return toast("ধাপ বাদ দেওয়া যাবে না — আগে '" + (STATUS_BN[expected] || expected) + "' করতে হবে।");
   // v25: the buy-products step stays LOCKED until the rider calls the
   // customer and taps "কাস্টমার কনফার্ম করেছে" (confirmCall).
   if (st === "picked_up" && !o.callConfirmedAt) return toast("আগে কাস্টমারকে কল করে কনফার্ম করুন — তারপর পণ্য কিনুন।");
-  recordStatus(o, st); setOrders(all); syncOrderStatus(o); renderAll(); notify(code + " → " + (STATUS_BN[st] || st));
+  recordStatus(o, st); setOrders(all); syncOrderStatus(o); renderAll(); notify(o.code + " → " + (STATUS_BN[st] || st));
 }
 function markPaid() {
   const s = session(); if (!s) return;
@@ -2080,7 +2236,7 @@ function adminOrderRow(o, showHistory) {
   let timing = "";
   if (o.status === "delivered") timing = td.lateMs <= 0 ? `<span class="pill ok">${bn(Math.round(td.totalMs / 60000))} মিনিটে ✓ সময়মতো</span>` : `<span class="pill bad">${bn(Math.round(td.lateMs / 60000))} মিনিট দেরি</span>`;
   else if (o.status === "placed") timing = !ridersCovering(o.area).length ? `<span class="pill bad">⚠️ এই এলাকায় রাইডার নেই</span>` : `<span class="muted">রাইডার অপেক্ষায়</span>`;
-  else timing = `<span class="js-countdown" data-code="${o.code}">${td.big}</span><br><span class="muted">${td.sub}</span>`;
+  else timing = `<span class="js-countdown" data-key="${esc(o.sbId || o.code)}">${td.big}</span><br><span class="muted">${td.sub}</span>`;
   const hist = showHistory ? (o.cancelHistory || []).map(h => `<br><span class="muted">❌ ${esc(h.rider || "রাইডার")} • ${fmtTime(h.at)} • ${esc(h.reason)}${h.note ? " — " + esc(h.note) : ""}</span>`).join("") : "";
   return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>${o.status === "cancelled" && o.cancelledBy === "customer" ? `<br><span class="muted">❌ কাস্টমার ক্যানসেল করেছে</span>` : (o.cancelHistory || []).length ? `<br><span class="muted">❌ ক্যানসেল: ${esc(lastCancelText(o))} (${esc(o.cancelledBy || "")})</span>` : ""}${hist}</td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
 }
@@ -2648,15 +2804,19 @@ function loadOrders() {
       .then(({ data, error }) => {
         if (error || !Array.isArray(data) || !data.length) { quietSync(false); return; }
         const local = orders();
-        const before = new Set(local.map(o => o.code));
+        // v34: match remote rows by their stable key, not by code alone —
+        // two rows sharing a code (same code, different Supabase ids) must
+        // both stay in the list. A local row that has not been merged yet
+        // has no sbId, so it still matches by code on its first merge.
+        const before = new Set(local.map(o => orderKey(o)));
         const fresh = [];
         data.forEach(r => {
           const code = r.order_code;
-          const ex = local.find(o => o.code === code);
+          const ex = local.find(o => (r.id && o.sbId === r.id) || (!o.sbId && o.code === code));
           // Fresh local write in flight (< 15s): keep the local row as-is.
           if (ex && ex._syncPending && (Date.now() - ex._syncPending) < 15000) return;
           const mapped = sbRowToOrder(r, ex);
-          if (!before.has(code)) fresh.push(mapped);
+          if (!ex && !before.has(orderKey(mapped))) fresh.push(mapped);
           if (ex) Object.assign(ex, mapped); else local.unshift(mapped);
         });
         setOrders(local);
@@ -2692,7 +2852,7 @@ setInterval(() => {
     if (!trackCode) return;
     const m = $("#modal");
     if (!m || !m.classList.contains("open")) return;
-    const o = orders().find(x => x.code === trackCode);
+    const o = findOrderFor(trackCode, (session() || {}).phone);
     if (!o) return;
     if (m.getAttribute("data-track-status") !== o.status) { renderTrackPopup(); return; }
     const t = timerDisplay(o);
