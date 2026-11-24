@@ -181,6 +181,7 @@ function shellHTML() {
   <a class="nav-link${active("deals.html")}" href="deals.html">জনপ্রিয় পণ্য</a>
   <a class="nav-link${active("about.html")}" href="about.html">About Us</a>
   <a class="nav-link${active("contact.html")}" href="contact.html">Contact Us</a>
+  <a class="nav-link${active("rider.html")}" href="rider.html">🛵 রাইডার হোন</a>
 </nav>
 <div id="demoBanner" class="panel" style="max-width:1200px;margin:12px auto 0;background:#fff7d6;border-color:#f5a623">
   <b>Demo / Local mode:</b> Supabase is not configured yet (placeholder in <code>supabase-config.js</code>).
@@ -204,6 +205,7 @@ function footerHTML() {
       <a href="deals.html">জনপ্রিয় পণ্য</a>
       <a href="about.html">About Us</a>
       <a href="contact.html">Contact Us</a>
+      <a href="rider.html">🛵 রাইডার হিসেবে রেজিস্টার করুন</a>
     </div>
     <div class="footer-col">
       <b>Customer Service</b>
@@ -466,15 +468,13 @@ const CUSTOMER_TERMS_HTML = `<div class="terms-box">
   </ul>
 </div>`;
 // Registration is customer-only: name, phone, email, password, address.
-// No role choice, no admin registration. Riders register via the app.
-// v30: email is REQUIRED — a 6-digit code goes to the email and the
-// account opens only after the code is verified (Supabase email OTP).
+// No role choice, no admin registration. Riders register on rider.html (v32).
 function openRegister() {
   // If a registration is waiting for its code, show the OTP step instead.
   if (getPendingReg()) { showOtpStep("modal"); return; }
   const b = $("#modalBody");
   b.innerHTML = `<img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>রেজিস্টার — কাস্টমার</h2>
-  <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। রাইডাররা অ্যাপ ব্যবহার করুন।</p>
+  <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। রাইডার হতে চাইলে <a href="rider.html">রাইডার রেজিস্ট্রেশন</a> করুন।</p>
   <label>নাম</label><input id="rName" placeholder="আপনার নাম">
   <label>ফোন নম্বর</label><input id="rPhone" placeholder="01XXXXXXXXX">
   <label>ইমেইল</label><input id="rEmail" type="email" placeholder="name@gmail.com">
@@ -570,7 +570,9 @@ function otpStepHTML(p) {
 function showOtpStep(where) {
   const p = getPendingReg(); if (!p) return;
   if (where === "page") {
-    const f = $("#regForm"), o = $("#regOtp");
+    // v32: the rider page uses #riderForm/#riderOtp, the login page #regForm/#regOtp.
+    const f = PAGE === "rider.html" ? $("#riderForm") : $("#regForm");
+    const o = PAGE === "rider.html" ? $("#riderOtp") : $("#regOtp");
     if (f && o) { f.classList.add("hidden"); o.innerHTML = otpStepHTML(p); o.classList.remove("hidden"); }
   } else {
     const b = $("#modalBody");
@@ -590,6 +592,7 @@ function cancelOtp() {
   // Back to the register form with a different email. The pending data is
   // dropped — the customer fills the form again.
   setPendingReg(null);
+  if (PAGE === "rider.html") { renderRiderPage(); return; }
   if (PAGE === "login.html") {
     const f = $("#regForm"), o = $("#regOtp");
     if (f && o) { o.classList.add("hidden"); o.innerHTML = ""; f.classList.remove("hidden"); }
@@ -611,12 +614,17 @@ async function verifyOtpCode() {
 function finishRegistration(p) {
   // The code verified — NOW the account is created, exactly like the old
   // instant registerWith did (same fields + email + emailVerified).
-  const u = { phone: p.phone, name: p.name, role: "customer", pass: p.pass, email: p.email, emailVerified: true, area: p.area || window.BAZARKORI_AREAS[0], address: p.addr, verified: true, vstatus: "verified", online: false, banned: false };
+  // v32: riders finish here too — role "rider", UNVERIFIED (pending) until
+  // the owner approves their NID in the admin panel.
+  const isRider = p.role === "rider";
+  const u = { phone: p.phone, name: p.name, role: isRider ? "rider" : "customer", pass: p.pass, email: p.email, emailVerified: true, area: isRider ? ((p.areas && p.areas[0]) || window.BAZARKORI_AREAS[0]) : (p.area || window.BAZARKORI_AREAS[0]), address: p.addr || null, verified: !isRider, vstatus: isRider ? "pending" : "verified", online: false, banned: false };
+  if (isRider) u.areas = p.areas || [];
   const all = users(); all.push(u); setUsers(all);
   insertProfileToSupabase(u); // real Supabase row, not just localStorage
   setPendingReg(null);
   save("bazar_session", u); closeModal(); renderAll();
   if (PAGE === "login.html") { location.href = "index.html"; return; }
+  if (isRider) { toast("রেজিস্টার হয়েছে! এখন NID ভেরিফিকেশন দিন — ছবি আর NID আপলোড করুন।"); return; }
   toast("রেজিস্টার হয়েছে! বাজার করি-তে স্বাগতম।");
 }
 // One unified login (phone + password). Used by the modal AND the login page.
@@ -628,10 +636,12 @@ function loginWith(phone, pass) {
   const u = users().find(x => x.phone === phone);
   if (!u || u.pass !== pass) return toast("ভুল ফোন নম্বর বা পাসওয়ার্ড।");
   if (u.role === "rider") {
-    // Riders use the separate Android app — no rider panel on the website.
+    // Riders use the separate Android app for the order panel — no rider
+    // panel on the website. Registration + NID verification live on
+    // rider.html (v32).
     const b = $("#modalBody");
     if (b) {
-      b.innerHTML = `<h2>রাইডাররা অ্যাপ ব্যবহার করুন</h2><p>রাইডার প্যানেল এখন শুধু Android অ্যাপে আছে। অনুগ্রহ করে বাজার করি রাইডার অ্যাপ থেকে লগইন করুন।</p><div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" onclick="closeModal()">ঠিক আছে</button></div>`;
+      b.innerHTML = `<h2>রাইডাররা অ্যাপ ব্যবহার করুন</h2><p>রাইডার প্যানেল (অর্ডার নেওয়া) এখন শুধু Android অ্যাপে আছে। রেজিস্ট্রেশন আর NID ভেরিফিকেশনের জন্য <a href="rider.html">রাইডার রেজিস্ট্রেশন পেজ</a> দেখুন।</p><div style="display:flex;gap:8px;margin-top:10px"><button class="btn ghost" onclick="closeModal()">ঠিক আছে</button></div>`;
       $("#modal").classList.add("open");
     }
     toast("রাইডাররা অ্যাপ ব্যবহার করুন");
@@ -672,10 +682,171 @@ async function registerWith(name, phone, pass, addr, area, email) {
 }
 function doRegister() { const n = $("#rName"), p = $("#rPhone"), e = $("#rEmail"), w = $("#rPass"), a = $("#rAddr"), ar = $("#rArea"); if (!$("#rAgree") || !$("#rAgree").checked) return toast("অনুগ্রহ করে শর্তাবলিতে রাজি হয়ে টিক দিন।"); if (n && p && e && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : "", e.value.trim()); }
 function registerFromPage() { const n = $("#rpName"), p = $("#rpPhone"), e = $("#rpEmail"), w = $("#rpPass"), a = $("#rpAddr"), ar = $("#rpArea"); if (!$("#rpAgree") || !$("#rpAgree").checked) return toast("অনুগ্রহ করে শর্তাবলিতে রাজি হয়ে টিক দিন।"); if (n && p && e && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : "", e.value.trim()); }
+// ---------- Rider registration (v32) ----------
+// Riders register on the WEBSITE now (rider.html) — no app needed for
+// onboarding. Same Supabase email-OTP flow as customers (v30), but the
+// account is role "rider", unverified (vstatus "pending") until the owner
+// approves the NID verification in the admin panel. Order receiving /
+// Accept / delivery status still work only in the rider app.
+const RIDER_TERMS_HTML = `<div class="terms-box">
+  <b>রাইডার শর্তাবলি — অনুগ্রহ করে পড়ে নিন</b>
+  <ul>
+    <li>🛍️ কাস্টমারের প্রতিটি প্রোডাক্ট রাইডার <b>নিজের টাকায়</b> কিনবে।</li>
+    <li>🤝 বাজার করি শুধু একটি <b>মাধ্যম</b> — আমরা রাইডারকে কাস্টমার পেতে সাহায্য করি।</li>
+    <li>✨ রাইডারের সুবিধা: আমাদের মাধ্যমে <b>সহজে অর্ডার পাবে</b>, সহজে ডেলিভারি করতে পারবে।</li>
+    <li>🚚 প্রতি অর্ডারে ডেলিভারি চার্জ <b>৳৩০ — পুরোটাই রাইডারের</b> (৫ কেজির বেশি হলে প্রতি অতিরিক্ত কেজি ৳৫ — সেটাও রাইডারের)।</li>
+    <li>🏷️ <b>সার্ভিস চার্জ:</b> কাস্টমার প্রতি পণ্যে MRP-র উপরে <b>৳৫</b> বেশি দেয়। রাইডার দোকান থেকে MRP-তে কিনবে, কাস্টমারের কাছ থেকে MRP+৳৫ নেবে — এই <b>৳৫ প্রতি পণ্য</b> বাজার করি-র, রাইডারকে প্রতিদিন জমা দিতে হবে।</li>
+    <li>💰 প্রতিদিন রাইডারকে জমা দিতে হবে: <b>(৳৫ × মোট পণ্য) + ডেলিভারি চার্জের ১০%</b>। উদাহরণ: একদিনে ১০টা পণ্য ডেলিভারি + ১০টা অর্ডারের ডেলিভারি চার্জ ৳৩০০ হলে জমা = ৳৫০ + ৳৩০ = <b>৳৮০</b>।</li>
+    <li>📞 <b>কল করে কনফার্ম:</b> অর্ডার নেওয়ার পর রাইডারকে অবশ্যই কাস্টমারকে কল করে কনফার্ম করতে হবে — কাস্টমার অর্ডারটা আসলেই নেবে কিনা। কনফার্ম না হওয়া পর্যন্ত পণ্য কেনা যাবে না। কাস্টমার না নিলে / ফোনে না পেলে / ঠিকানা ভুল হলে রাইডার কারণ দিয়ে অর্ডার ক্যানসেল করবে — অর্ডারটা আবার অন্য রাইডারের কাছে যাবে, আর ক্যানসেল করা রাইডার ওই অর্ডার আর নিতে পারবে না।</li>
+  </ul>
+</div>`;
+async function registerRiderWith(name, phone, pass, email, areas) {
+  if (!name || !phone || !email || !pass) return toast("নাম, ফোন, ইমেইল ও পাসওয়ার্ড — সবগুলো দিন।");
+  phone = normalisePhone(phone);
+  if (!phone) return toast(PHONE_ERR);
+  email = normaliseEmail(email);
+  if (!isValidEmail(email)) return toast(EMAIL_ERR);
+  if (!areas || !areas.length) return toast("কমপক্ষে ১টি ডেলিভারি এলাকা বেছে নিন।");
+  if (users().some(x => x.phone === phone)) return toast("এই ফোন নম্বরটি ইতিমধ্যে রেজিস্টার করা আছে। লগইন করুন।");
+  if (users().some(x => (x.email || "").toLowerCase() === email)) return toast("এই ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট আছে। লগইন করুন।");
+  if (!LIVE || !sb) return toast("ইমেইল ভেরিফিকেশন এখনো চালু হয়নি — কিছুক্ষণ পরে আবার চেষ্টা করুন।");
+  const p = { name, phone, pass, email, areas, role: "rider" };
+  setPendingReg(p);
+  if (await sendOtpCode(p)) {
+    showOtpStep("page");
+    toast("ভেরিফিকেশন কোড আপনার ইমেইলে পাঠানো হয়েছে।");
+  } else setPendingReg(null);
+}
+function doRegisterRider() {
+  if (!$("#rrAgree") || !$("#rrAgree").checked) return toast("অনুগ্রহ করে শর্তাবলিতে রাজি হয়ে টিক দিন।");
+  const areas = Array.from(document.querySelectorAll(".rrAreaCb:checked")).map(c => c.value);
+  const n = $("#rrName"), p = $("#rrPhone"), e = $("#rrEmail"), w = $("#rrPass");
+  if (n && p && e && w) registerRiderWith(n.value.trim(), p.value.trim(), w.value, e.value.trim(), areas);
+}
+function riderLoginFromPage() {
+  const p = $("#rlPhone"), w = $("#rlPass");
+  if (!p || !w) return;
+  const phone = normalisePhone(p.value.trim());
+  if (!phone) return toast(PHONE_ERR);
+  const u = users().find(x => x.phone === phone);
+  if (!u || u.pass !== w.value) return toast("ভুল ফোন নম্বর বা পাসওয়ার্ড।");
+  if (u.role !== "rider") return toast("এই নম্বরে রাইডার অ্যাকাউন্ট নেই — নিচে রেজিস্টার করুন।");
+  if (u.banned) return toast("Your account is OFF / banned. Contact the owner on WhatsApp after payment.");
+  save("bazar_session", u); renderAll();
+  toast("Logged in as " + u.name);
+}
+function riderRegisterView() {
+  return `
+  <div class="panel" style="background:#fff7d6;border-color:#f5a623"><b>ℹ️ জেনে রাখুন:</b> এই পেজে রেজিস্ট্রেশন আর NID ভেরিফিকেশন করা যায়। অর্ডার পাওয়া / Accept / ডেলিভারি স্ট্যাটাস আপডেট এখন শুধু রাইডার অ্যাপে চলে — অ্যাপটি এখনো তৈরি হয়নি। এখানে রেজিস্ট্রেশন করে ভেরিফাই হয়ে থাকলে অ্যাপ এলেই অর্ডার পেতে শুরু করবেন।</div>
+  <div id="riderForm" style="margin-top:16px">
+  <div class="login-grid">
+    <div class="panel">
+      <h2>রেজিস্টার — রাইডার</h2>
+      ${RIDER_TERMS_HTML}
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="rrAgree" style="width:auto;margin-top:4px"> <span>হ্যাঁ, উপরের সব শর্তে আমি রাজি</span></label>
+      <label>নাম (NID-র নামের সাথে মিলতে হবে)</label><input id="rrName" placeholder="আপনার নাম">
+      <label>ফোন নম্বর</label><input id="rrPhone" placeholder="01XXXXXXXXX">
+      <label>ইমেইল</label><input id="rrEmail" type="email" placeholder="name@gmail.com">
+      <label>পাসওয়ার্ড</label><input id="rrPass" type="password" placeholder="পাসওয়ার্ড">
+      <label>ডেলিভারি এলাকা — কমপক্ষে ১টি বেছে নিন</label>
+      <div class="area-checks">${window.BAZARKORI_AREAS.map(a => `<label class="area-check"><input type="checkbox" class="rrAreaCb" value="${esc(a)}"> ${esc(a)}</label>`).join("")}</div>
+      <button class="btn gold" style="width:100%;margin-top:10px" onclick="doRegisterRider()">রেজিস্টার করুন</button>
+      <p class="muted">রেজিস্ট্রেশনের সময় আপনার ইমেইলে ৬ সংখ্যার ভেরিফিকেশন কোড যাবে (bazarkori.shop.bd@gmail.com থেকে) — কোডটি বসালেই অ্যাকাউন্ট চালু হবে।</p>
+    </div>
+    <div class="panel">
+      <h2>আগে রেজিস্টার করেছেন?</h2>
+      <p class="muted">রাইডার অ্যাকাউন্ট থাকলে লগইন করুন — NID ভেরিফিকেশন দিতে পারবেন।</p>
+      <label>ফোন নম্বর</label><input id="rlPhone" placeholder="01XXXXXXXXX">
+      <label>পাসওয়ার্ড</label><input id="rlPass" type="password" placeholder="পাসওয়ার্ড">
+      <button class="btn gold" style="width:100%;margin-top:10px" onclick="riderLoginFromPage()">রাইডার লগইন</button>
+    </div>
+  </div>
+  </div>
+  <div id="riderOtp" class="hidden" style="max-width:560px;margin:16px auto 0"></div>`;
+}
+function riderVerifyView(s) {
+  const me = users().find(u => u.phone === s.phone) || s;
+  const ver = ls("bazar_verifications", []).find(v => v.phone === me.phone);
+  const status = me.verified ? "verified" : (ver ? ver.status : (me.vstatus || "pending"));
+  let statusLine;
+  if (me.verified) statusLine = `<p class="pill ok">✅ Verified — অ্যাডমিন অনুমোদন দিয়েছেন।</p>`;
+  else if (status === "rejected") statusLine = `<p class="pill bad">❌ ভেরিফিকেশন বাতিল হয়েছে — সঠিক NID দিয়ে আবার জমা দিন।</p>`;
+  else statusLine = `<p class="pill warn">⏳ যাচাই চলছে — অ্যাডমিন অনুমোদন দিলে জানানো হবে।</p>`;
+  return `
+  <div class="panel" style="max-width:720px;margin:0 auto">
+    <h2>🛵 ${esc(me.name)}</h2>
+    <p class="muted">${esc(me.phone)} • এলাকা: ${esc((me.areas || []).join(", ") || "—")}</p>
+    ${statusLine}
+    ${me.verified ? `<p>আপনার অ্যাকাউন্ট ভেরিফাইড। অর্ডার পাওয়া / Accept / ডেলিভারি স্ট্যাটাস এখন শুধু রাইডার অ্যাপে চলে — অ্যাপটি এখনো তৈরি হয়নি। অ্যাপ এলেই অর্ডার পেতে শুরু করবেন।</p>` : `
+    <h3>NID ভেরিফিকেশন</h3>
+    <p class="muted">আপনার ছবি + NID-র সামনে ও পেছনের ছবি আপলোড করুন। প্রোফাইলের নাম NID-র নামের সাথে মিলতে হবে।</p>
+    <label>আপনার ছবি</label><input type="file" accept="image/*" id="vPhoto">
+    <label>NID-র সামনের দিক</label><input type="file" accept="image/*" id="vFront">
+    <label>NID-র পেছনের দিক</label><input type="file" accept="image/*" id="vBack">
+    <label>NID-তে লেখা নাম</label><input id="vName" placeholder="NID-তে যেভাবে লেখা আছে">
+    <label>NID নম্বর</label><input id="vNid" placeholder="NID নম্বর">
+    <button class="btn gold" style="width:100%;margin-top:10px" onclick="submitVerification()">ভেরিফিকেশন জমা দিন</button>
+    ${ver ? `<p class="muted">জমা দেওয়া হয়েছে — স্ট্যাটাস: ${esc(ver.status)}। অ্যাডমিন দেখছেন।</p>` : ""}`}
+    <p style="margin-top:14px"><button class="btn ghost" onclick="logout()">Logout</button></p>
+  </div>`;
+}
+function renderRiderPage() {
+  const el = $("#riderMain"); if (!el) return;
+  const s = session();
+  // Step 3: a logged-in rider sees their verification status / upload.
+  if (s && s.role === "rider") { el.innerHTML = riderVerifyView(s); refreshRiderStatus(); return; }
+  // Steps 1+2: disclaimer + form (+ returning-rider login).
+  const note = (s && s.role !== "rider") ? `<div class="panel" style="background:#fff7d6;border-color:#f5a623">আপনি <b>${esc(s.name)}</b> (${esc(s.role)}) হিসেবে লগইন করা আছেন — রাইডার রেজিস্ট্রেশন করতে আগে Logout করুন। <button class="btn small ghost" onclick="logout()">Logout</button></div>` : "";
+  el.innerHTML = note + riderRegisterView();
+  // A rider registration waiting for its email code survives a reload.
+  const pending = getPendingReg();
+  if (pending && pending.role === "rider") showOtpStep("page");
+}
+function refreshRiderStatus() {
+  // Best-effort: if the owner approved on another device, pick it up.
+  const s = session(); if (!s || s.role !== "rider" || !LIVE || !sb) return;
+  try {
+    sb.from("profiles").select("is_verified,verification_status").eq("phone", s.phone).maybeSingle()
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        const all = users(); const me = all.find(u => u.phone === s.phone); if (!me) return;
+        const wantVerified = !!data.is_verified;
+        const wantStatus = data.verification_status || me.vstatus;
+        if (me.verified !== wantVerified || me.vstatus !== wantStatus) {
+          me.verified = wantVerified; me.vstatus = wantStatus; setUsers(all);
+          save("bazar_session", Object.assign({}, session(), { verified: wantVerified, vstatus: wantStatus }));
+          renderAll();
+        }
+      }).catch(() => {});
+  } catch (e) {}
+}
 function insertProfileToSupabase(u) {
   // Upsert by phone (unique): creates the row, or refreshes it if it exists.
+  // v32: role comes from the account (rider rows carry role "rider" + their
+  // areas joined into `area` + verification_status "pending").
   if (!LIVE || !sb) return;
-  try { sb.from("profiles").upsert([{ phone: u.phone, name: u.name, role: "customer", password_hash: u.pass || "", area: u.area || null, address: u.address || null }], { onConflict: "phone" }).then(() => {}).catch(() => {}); } catch (e) {}
+  try { sb.from("profiles").upsert([{ phone: u.phone, name: u.name, role: u.role || "customer", password_hash: u.pass || "", area: u.area || (u.areas ? u.areas.join(", ") : null), address: u.address || null, is_verified: !!u.verified, verification_status: u.vstatus || "not_submitted" }], { onConflict: "phone" }).then(() => {}).catch(() => {}); } catch (e) {}
+}
+function syncRiderStatusToSupabase(phone, status) {
+  // Keep the profiles row in step with a verification review / submission.
+  if (!LIVE || !sb) return;
+  try { sb.from("profiles").update({ verification_status: status, is_verified: status === "verified" }).eq("phone", phone).then(() => {}).catch(() => {}); } catch (e) {}
+}
+function insertVerificationToSupabase(phone, nidName, nid, photo, front, back) {
+  // v32: the NID submission also goes to Supabase rider_verifications, so
+  // the owner sees it on ANY device (localStorage is per-browser — a rider
+  // registering on their own phone would otherwise be invisible to the
+  // owner's PC). Best-effort: the local copy is the working store.
+  if (!LIVE || !sb) return;
+  try {
+    const row = { phone, nid_name: nidName, nid_number: nid, status: "pending", photo_url: photo || null, nid_front_url: front || null, nid_back_url: back || null };
+    sb.from("profiles").select("id").eq("phone", phone).maybeSingle()
+      .then(({ data }) => {
+        if (data && data.id) row.rider_id = data.id;
+        return sb.from("rider_verifications").insert([row]);
+      }).catch(() => {});
+    syncRiderStatusToSupabase(phone, "pending");
+  } catch (e) {}
 }
 
 // ---------- Saved customer profile ----------
@@ -1483,6 +1654,7 @@ function submitVerification() {
     vs.push({ rider: s.name, phone: s.phone, nidName: name, nid: nid, status: "pending", photo, front, back });
     save("bazar_verifications", vs);
     const all = users(); const me = all.find(u => u.phone === s.phone); if (me) { me.vstatus = "pending"; setUsers(all); }
+    insertVerificationToSupabase(s.phone, name, nid, photo, front, back);
     renderAll(); toast("Verification submitted. Admin will review your NID.");
   })));
 }
@@ -1683,6 +1855,7 @@ function renderAdmin() {
     return;
   }
   const all = orders(), t = todayStr(), todays = all.filter(o => o.date === t);
+  loadAdminVerifs(false); // v32: verifications + riders from Supabase too
   const sales = todays.reduce((a, o) => a + o.subtotal, 0), fees = todays.reduce((a, o) => a + o.fee, 0);
   const riders = users().filter(u => u.role === "rider");
   const verifs = ls("bazar_verifications", []);
@@ -1713,9 +1886,7 @@ function renderAdmin() {
     return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>${o.status === "cancelled" && o.cancelledBy === "customer" ? `<br><span class="muted">❌ কাস্টমার ক্যানসেল করেছে</span>` : (o.cancelHistory || []).length ? `<br><span class="muted">❌ ক্যানসেল: ${esc(lastCancelText(o))} (${esc(o.cancelledBy || "")})</span>` : ""}</td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
   }).join("") : `<tr><td colspan="9">এখনো কোনো অর্ডার আসেনি — কাস্টমার অর্ডার করলেই এখানে দেখাবে।</td></tr>`}</table>
   <h3>Rider Verification</h3>
-  ${verifs.length ? verifs.map((v, i) => `<div class="panel"><b>${esc(v.nidName)}</b> (${esc(v.rider)}) • NID ${esc(v.nid)} • ${esc(v.phone)} • <span class="pill ${v.status === "verified" ? "ok" : v.status === "rejected" ? "bad" : "warn"}">${v.status}</span><br>
-  ${v.photo ? `<img src="${v.photo}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">` : ""} ${v.front ? `<img src="${v.front}" style="width:120px;height:80px;object-fit:cover;border-radius:8px">` : ""} ${v.back ? `<img src="${v.back}" style="width:120px;height:80px;object-fit:cover;border-radius:8px">` : ""}
-  <br><button class="btn small" onclick="reviewVerification(${i},'verified')">Approve</button> <button class="btn small danger" onclick="reviewVerification(${i},'rejected')">Reject</button></div>`).join("") : "<p>No verification requests.</p>"}
+  ${adminVerificationHTML(verifs, riders)}
   <h3>Daily Settlement — Tonight's Checklist (${t})</h3>
   <p class="muted">Approve = rider stays active tomorrow. Not Approved = rider goes OFF/banned until you re-activate after WhatsApp payment.</p>
   <button class="btn small" onclick="buildSettlement()">Generate Tonight's Checklist</button>
@@ -1730,7 +1901,7 @@ function renderAdmin() {
     <button class="btn small gold" onclick="reactivateRider('${esc(r.phone)}')">Re-activate / ON</button></div>`;
   }).join("")}
   <h3>Riders</h3>
-  <table><tr><th>Name</th><th>Phone</th><th>এলাকা</th><th>Verified</th><th>Online</th><th>Status</th></tr>${riders.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.phone)}</td><td>${esc((r.areas || []).join(", ") || "—")}</td><td>${r.verified ? "Yes" : r.vstatus}</td><td>${r.online ? "Online" : "Offline"}</td><td>${r.banned ? "OFF" : "Active"}</td></tr>`).join("")}</table>
+  <table><tr><th>Name</th><th>Phone</th><th>এলাকা</th><th>Verified</th><th>Online</th><th>Status</th></tr>${mergeAdminRiders(riders).map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.phone)}</td><td>${esc((r.areas || []).join(", ") || "—")}</td><td>${r.verified ? "Yes" : r.vstatus}</td><td>${r.online ? "Online" : "Offline"}</td><td>${r.banned ? "OFF" : "Active"}</td></tr>`).join("")}</table>
   <h3>Settings</h3><p>Owner bKash (riders send 10% here): <b>${BKASH}</b> • Delivery fee: ${fmt(DELIVERY_FEE)} (৫ কেজি পর্যন্ত) + ৳৫ প্রতি অতিরিক্ত কেজি • Areas: ${window.BAZARKORI_AREAS.join(", ")}</p>
   <p class="muted">Admin account is one-time only. No one can register a second admin from this app.</p>`;
 }
@@ -1739,7 +1910,84 @@ function reviewVerification(i, status) {
   v.status = status; save("bazar_verifications", vs);
   const all = users(); const r = all.find(u => u.phone === v.phone);
   if (r) { r.verified = status === "verified"; r.vstatus = status; if (status === "verified") r.name = v.nidName; if (status !== "verified") r.online = false; setUsers(all); }
+  // v32: keep Supabase in step (rider's phone + any other admin device).
+  if (LIVE && sb) {
+    try { sb.from("rider_verifications").update({ status, reviewed_at: new Date().toISOString() }).eq("phone", v.phone).then(() => {}).catch(() => {}); } catch (e) {}
+    syncRiderStatusToSupabase(v.phone, status);
+    loadAdminVerifs(true);
+  }
   renderAll(); toast("Rider " + status + ": " + v.nidName);
+}
+// ---------- Admin verifications from Supabase (v32) ----------
+// A rider registers + submits NID on THEIR phone; the owner reviews on
+// HIS PC. localStorage is per-browser, so the admin list MUST also read
+// Supabase rider_verifications + rider profiles — otherwise a
+// website-registered rider would be invisible to the owner.
+let adminVerifsSb = null, adminRidersSb = null;
+function loadAdminVerifs(force) {
+  if (!LIVE || !sb) return;
+  if (adminVerifsSb !== null && !force) return;
+  try {
+    sb.from("rider_verifications").select("*").order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        adminVerifsSb = (!error && Array.isArray(data)) ? data : [];
+        if (adminTab === "orders") renderAdmin();
+      }).catch(() => { adminVerifsSb = []; });
+    sb.from("profiles").select("phone,name,role,area,is_verified,verification_status,is_online,is_banned").eq("role", "rider")
+      .then(({ data, error }) => {
+        adminRidersSb = (!error && Array.isArray(data)) ? data : [];
+        if (adminTab === "orders") renderAdmin();
+      }).catch(() => { adminRidersSb = []; });
+  } catch (e) {}
+}
+function mergeAdminRiders(localRiders) {
+  const seen = new Set((localRiders || []).map(r => r.phone));
+  const extra = (adminRidersSb || []).filter(r => !seen.has(r.phone)).map(r => ({
+    name: r.name, phone: r.phone, areas: (r.area || "").split(",").map(s => s.trim()).filter(Boolean),
+    verified: !!r.is_verified, vstatus: r.verification_status || "not_submitted",
+    online: !!r.is_online, banned: !!r.is_banned
+  }));
+  return (localRiders || []).concat(extra);
+}
+function adminVerificationHTML(localVerifs, riders) {
+  // Merge local rows (this browser) with Supabase rows (any device),
+  // deduped by phone. Each row shows photo + NID images, name, phone,
+  // delivery areas, and Approve/Reject.
+  const seen = new Set();
+  const rows = [];
+  (localVerifs || []).forEach((v, i) => { seen.add(v.phone); rows.push({ v, localIdx: i, sbId: null }); });
+  (adminVerifsSb || []).forEach(r => {
+    if (seen.has(r.phone)) return; seen.add(r.phone);
+    rows.push({ v: { rider: r.nid_name, nidName: r.nid_name, nid: r.nid_number, phone: r.phone, status: r.status, photo: r.photo_url, front: r.nid_front_url, back: r.nid_back_url }, localIdx: null, sbId: r.id });
+  });
+  if (!rows.length) return "<p>No verification requests.</p>";
+  return rows.map(({ v, localIdx, sbId }) => {
+    const r = (riders || []).find(u => u.phone === v.phone);
+    const sbR = (adminRidersSb || []).find(u => u.phone === v.phone);
+    const areas = (r && r.areas && r.areas.length) ? r.areas.join(", ") : (sbR && sbR.area) ? sbR.area : (r ? (r.area || "—") : "—");
+    const btns = localIdx !== null
+      ? `<button class="btn small" onclick="reviewVerification(${localIdx},'verified')">Approve</button> <button class="btn small danger" onclick="reviewVerification(${localIdx},'rejected')">Reject</button>`
+      : `<button class="btn small" onclick="reviewVerificationSb('${sbId}','${esc(v.phone)}','verified')">Approve</button> <button class="btn small danger" onclick="reviewVerificationSb('${sbId}','${esc(v.phone)}','rejected')">Reject</button>`;
+    return `<div class="panel"><b>${esc(v.nidName)}</b> (${esc(v.rider)}) • NID ${esc(v.nid)} • ${esc(v.phone)} • এলাকা: ${esc(areas)} • <span class="pill ${v.status === "verified" ? "ok" : v.status === "rejected" ? "bad" : "warn"}">${v.status}</span><br>
+  ${v.photo ? `<img src="${v.photo}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">` : ""} ${v.front ? `<img src="${v.front}" style="width:120px;height:80px;object-fit:cover;border-radius:8px">` : ""} ${v.back ? `<img src="${v.back}" style="width:120px;height:80px;object-fit:cover;border-radius:8px">` : ""}
+  <br>${btns}</div>`;
+  }).join("") + `<p><button class="btn small ghost" onclick="loadAdminVerifs(true)">🔄 ভেরিফিকেশন রিফ্রেশ করুন</button></p>`;
+}
+function reviewVerificationSb(id, phone, status) {
+  // Approve/Reject for a verification that only exists in Supabase
+  // (rider registered on another device).
+  if (!LIVE || !sb) return toast("Supabase চালু নেই — আবার চেষ্টা করুন।");
+  try {
+    sb.from("rider_verifications").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id)
+      .then(() => {
+        syncRiderStatusToSupabase(phone, status);
+        const all = users(); const r = all.find(u => u.phone === phone);
+        if (r) { r.verified = status === "verified"; r.vstatus = status; if (status === "verified") { const v = (adminVerifsSb || []).find(x => String(x.id) === String(id)); if (v) r.name = v.nid_name; } if (status !== "verified") r.online = false; setUsers(all); }
+        const vs = ls("bazar_verifications", []); const lv = vs.find(x => x.phone === phone); if (lv) { lv.status = status; save("bazar_verifications", vs); }
+        adminVerifsSb = null; loadAdminVerifs(true); renderAll();
+        toast("Rider " + status + ": " + phone);
+      }).catch(() => toast("আপডেট হয়নি — আবার চেষ্টা করুন।"));
+  } catch (e) { toast("আপডেট হয়নি — আবার চেষ্টা করুন।"); }
 }
 function buildSettlement() {
   const t = todayStr(); const ss = ls("bazar_settlements", []);
@@ -1852,6 +2100,7 @@ function renderAll() {
   else if (PAGE === "cart.html") { renderCart(); }
   else if (PAGE === "orders.html") { renderMyOrders(); }
   else if (PAGE === "admin.html") { renderAdmin(); }
+  else if (PAGE === "rider.html") { renderRiderPage(); }
   renderCart(); // header cart count + total, on every page (guarded inside)
   const newCount = orders().filter(o => o.status === "placed").length;
   const b = $("#orderBadge"); if (b) { b.textContent = newCount; b.classList.toggle("hidden", !newCount); }
