@@ -301,6 +301,16 @@ footer{padding:28px 20px;text-align:center;color:var(--muted);font-size:15px;lin
 .trust-num{font-size:26px;font-weight:900;color:var(--green-deep);margin:6px 0}
 .stars{color:var(--marigold);letter-spacing:2px}
 
+/* Customer reviews (v38) — real reviews only; no sample quotes. */
+.review-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0 22px}
+.review-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow-soft)}
+.review-stars{color:var(--marigold);font-size:20px;letter-spacing:2px}
+.review-text{margin:8px 0;font-size:15px;font-weight:600}
+.review-who{font-weight:800;margin:6px 0 0}
+.review-pop textarea{width:100%;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;resize:vertical}
+.review-pop .rstar{background:none;border:0;font-size:38px;color:#d1d5db;cursor:pointer;padding:0 4px;line-height:1}
+.review-pop .rstar.on{color:var(--marigold)}
+
 /* Footer columns (FreshMart-style) */
 footer{display:block;padding:0;text-align:left;background:var(--green-deep);color:#dcefe3;margin-top:10px}
 .footer-cols{max-width:1200px;margin:0 auto;padding:34px 20px 10px;display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1.2fr;gap:24px}
@@ -322,6 +332,7 @@ footer{display:block;padding:0;text-align:left;background:var(--green-deep);colo
   .hero-basket{height:300px}
   .promos{grid-template-columns:1fr}
   .testimonials{grid-template-columns:1fr}
+  .review-grid{grid-template-columns:1fr}
 }
 @media(max-width:640px){
   .topbar span{font-size:13px}

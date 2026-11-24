@@ -1890,6 +1890,7 @@ function renderTrackPopup() {
   ${unmatched ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো রাইডার নেই</p>` : ""}
   ${o.rider ? `<p>🚴 রাইডার: <b>${esc(o.rider)}</b></p>` : `<p class="muted">রাইডার এখনো অর্ডারটি নেয়নি — কনফার্ম হলেই টাইমার শুরু হবে।</p>`}
   ${(o.status === "placed" || o.status === "accepted") ? `<button class="btn danger" style="width:100%;margin-top:8px" onclick="askCustomerCancel('${o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : ""}
+  ${o.status === "delivered" ? (reviewForOrder(o.code) ? `<p class="muted">⭐ আপনি এই অর্ডারে রিভিউ দিয়েছেন — ধন্যবাদ!</p>` : (!reviewDismissed(o.code) ? `<button class="btn gold" style="width:100%;margin-top:8px" onclick="openReviewPopup('${o.code}')">⭐ রিভিউ দিন</button>` : "")) : ""}
   <p class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</p>
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="closeTrackPopup()">ঠিক আছে — Close</button><button class="btn ghost" onclick="location.href='orders.html?track=${o.code}'">📍 My Orders-এ ট্র্যাক দেখুন</button></div></div>`;
 }
@@ -1956,6 +1957,102 @@ function syncOnlineToSupabase(u) {
   try { sb.from("profiles").update({ is_online: !!u.online }).eq("phone", u.phone).then(() => {}).catch(() => {}); } catch (e) {}
 }
 
+// ---------- Customer reviews (v38) ----------
+// Tamim (24 Nov ~19:14): the home page showed SAMPLE testimonials
+// (a made-up quote from "রহিমা আ." + a ৪.৯/৫ rating) — no real customer
+// had ever reviewed anything. Now ONLY real reviews exist: a customer
+// whose order was actually DELIVERED may review it once, via an
+// optional popup. localStorage only — Supabase has NO `reviews` table
+// (checked 24 Nov 2026: PostgREST PGRST205 "Could not find the table
+// 'public.reviews'"), and no table may be created in this build, so
+// there is no server sync for reviews.
+const reviews = () => ls("bazar_reviews", []);
+const setReviews = list => save("bazar_reviews", list);
+const reviewForOrder = code => reviews().find(r => r.orderCode === code);
+const reviewDismissed = code => ls("bazar_review_dismissed", []).includes(code);
+function dismissReview(code) { const d = ls("bazar_review_dismissed", []); if (!d.includes(code)) { d.push(code); save("bazar_review_dismissed", d); } }
+// Public display: newest first, cap 6, demo/test accounts never shown.
+function publicReviews() {
+  return reviews().filter(r => !isDemoPhone(r.phone))
+    .sort((a, b) => (b.created || "").localeCompare(a.created || "")).slice(0, 6);
+}
+const starRow = n => { const k = Math.max(0, Math.min(5, n || 0)); return "★★★★★".slice(0, k) + "☆☆☆☆☆".slice(0, 5 - k); };
+const fmtDateBn = iso => { try { return new Date(iso).toLocaleDateString("bn-BD", { day: "numeric", month: "long", year: "numeric" }); } catch { return iso || ""; } };
+function renderReviews() {
+  const el = $("#reviewsSection"); if (!el) return;
+  const list = publicReviews();
+  // Zero real reviews = NOTHING here. The old sample quotes are gone and
+  // no fake name/quote/rating is ever rendered.
+  if (!list.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="section-head"><h2>⭐ কাস্টমারদের মতামত</h2></div>
+  <div class="review-grid">${list.map(r => `<div class="review-card">
+    <div class="review-stars">${starRow(r.stars)}</div>
+    ${r.text ? `<p class="review-text">"${esc(r.text)}"</p>` : `<p class="review-text muted">রেটিং দিয়েছেন — কোনো লেখা দেননি।</p>`}
+    <p class="review-who">— ${esc(r.name)}</p>
+    <p class="muted">${fmtDateBn(r.created || r.date)} • অর্ডার ${esc(r.orderCode)}</p>
+  </div>`).join("")}</div>`;
+}
+let _reviewStars = 0, _reviewCode = null, _reviewJustDone = false;
+function openReviewPopup(code) {
+  const s = session(); if (!s) return;
+  const o = findOrderFor(code, s.phone);
+  if (!o || o.status !== "delivered") return; // only delivered orders
+  if (reviewForOrder(code) || reviewDismissed(code)) return; // once per order
+  _reviewStars = 0; _reviewCode = code;
+  openModal(`<div class="review-pop">
+    <h2 style="margin-top:0">⭐ আপনার মতামত দিন</h2>
+    <p class="muted">অর্ডার <b>${esc(code)}</b> ডেলিভারি হয়েছে — কেমন লাগলো? চাইলে রিভিউ দিন, না চাইলে পরে করবেন।</p>
+    <div class="review-stars" id="reviewStars">${[1, 2, 3, 4, 5].map(n => `<button type="button" class="rstar" data-n="${n}" onclick="setReviewStars(${n})">☆</button>`).join("")}</div>
+    <textarea id="reviewText" rows="3" maxlength="300" placeholder="কেমন লাগলো? (ইচ্ছা হলে লিখুন)"></textarea>
+    <p class="muted">নাম হিসেবে দেখাবে: <b>${esc(s.name || "")}</b></p>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn gold" style="flex:1" onclick="submitReview()">✅ রিভিউ দিন</button>
+      <button class="btn ghost" onclick="dismissReviewPopup()">পরে করব</button>
+    </div></div>`);
+}
+function setReviewStars(n) {
+  _reviewStars = n;
+  document.querySelectorAll("#reviewStars .rstar").forEach(b => { const on = +b.dataset.n <= n; b.textContent = on ? "★" : "☆"; b.classList.toggle("on", on); });
+}
+function submitReview() {
+  const s = session(); if (!s || !_reviewCode) return;
+  const o = findOrderFor(_reviewCode, s.phone);
+  if (!o || o.status !== "delivered") { closeModal(); return; }
+  if (reviewForOrder(_reviewCode)) { closeModal(); toast("এই অর্ডারের রিভিউ আগেই দেওয়া হয়েছে।"); return; }
+  if (!_reviewStars) return toast("অনুগ্রহ করে ১–৫ স্টার দিন।");
+  const text = ((document.querySelector("#reviewText") || {}).value || "").trim().slice(0, 300);
+  const all = reviews();
+  all.push({ orderCode: _reviewCode, phone: s.phone, name: s.name || "কাস্টমার", stars: _reviewStars, text, date: todayStr(), created: new Date().toISOString() });
+  setReviews(all);
+  _reviewCode = null; _reviewStars = 0; _reviewJustDone = true;
+  closeModal(); renderAll(); toast("ধন্যবাদ! আপনার রিভিউ দেওয়া হয়েছে।");
+}
+function dismissReviewPopup() { if (_reviewCode) dismissReview(_reviewCode); _reviewCode = null; _reviewStars = 0; _reviewJustDone = true; closeModal(); renderAll(); }
+// Least-intrusive trigger: when the customer opens My Orders and has a
+// delivered order that is neither reviewed nor dismissed, show the popup
+// once for the most recent such order. Never blocks ordering/browsing —
+// the modal is dismissible and never reappears for that order.
+function maybePromptReview() {
+  const s = session(); if (!s || s.role !== "customer") return;
+  if (PAGE !== "orders.html") return;
+  if (_reviewJustDone) { _reviewJustDone = false; return; } // just submitted/dismissed — don't re-prompt right away
+  const m = $("#modal"); if (m && m.classList.contains("open")) return;
+  const mine = orders().filter(o => (o.phone === s.phone || o.customer === s.name) && o.status === "delivered" && !reviewForOrder(o.code) && !reviewDismissed(o.code));
+  if (!mine.length) return;
+  mine.sort((a, b) => (((b.statusLog || {}).delivered) || b.created || "").localeCompare(((a.statusLog || {}).delivered) || a.created || ""));
+  openReviewPopup(mine[0].code);
+}
+// Admin read-only list (v38): respects the same demo toggle as the rest
+// of the admin panel — demo reviews hidden unless the toggle is ON.
+function adminReviewsHTML() {
+  const list = (adminShowDemo() ? reviews() : reviews().filter(r => !isDemoPhone(r.phone)))
+    .sort((a, b) => (b.created || "").localeCompare(a.created || ""));
+  if (!list.length) return `<h3>⭐ কাস্টমার রিভিউ</h3><p class="muted">এখনো কোনো রিভিউ আসেনি।</p>`;
+  return `<h3>⭐ কাস্টমার রিভিউ (${list.length})</h3>
+  <table><tr><th>অর্ডার</th><th>নাম</th><th>স্টার</th><th>মতামত</th><th>তারিখ</th></tr>
+  ${list.slice(0, 50).map(r => `<tr><td>${esc(r.orderCode)}</td><td>${esc(r.name)}</td><td>${starRow(r.stars)}</td><td>${esc(r.text || "—")}</td><td>${esc(r.date || "")}</td></tr>`).join("")}</table>`;
+}
+
 // ---------- Customer tracking ----------
 const STEPS = [["placed", "অর্ডার দেওয়া হয়েছে"], ["accepted", "অর্ডার নেওয়া হয়েছে"], ["picked_up", "পণ্য কেনা হয়েছে"], ["on_the_way", "রাস্তায় আছে"], ["delivered", "ডেলিভারি হয়েছে"]];
 function renderMyOrders() {
@@ -1970,6 +2067,7 @@ function renderMyOrders() {
   mo.innerHTML = profileBar + (s ? "" : "<p class='muted'>অর্ডার দেখতে লগইন করুন।</p>") + (list.length ? list.map(o => {
     const idx = STEPS.findIndex(x => x[0] === o.status);
     const log = o.statusLog || {};
+    const rv = reviewForOrder(o.code); // v38: one review per delivered order
     return `<div class="panel"><b>${o.code}</b> • ${fmt(o.total)} • ${esc(o.area)} • <span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>
     <button class="btn small gold" onclick="openTrackPopup('${o.code}')">📍 লাইভ ট্র্যাক</button>
     ${(o.status === "placed" || o.status === "accepted") ? `<button class="btn small danger" onclick="askCustomerCancel('${o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : ""}
@@ -1978,8 +2076,10 @@ function renderMyOrders() {
     ${log.callConfirmed ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(log.callConfirmed)}</p>` : ""}
     ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (${esc(lastCancelText(o))})</p>` : ""}
     ${o.rider ? `<p>🚴 রাইডার: <b>${esc(o.rider)}</b>${o.status === "delivered" ? " • ডেলিভারি সম্পন্ন হয়েছে। ধন্যবাদ!" : o.status === "on_the_way" ? " • আপনার পার্সেল নিয়ে রাস্তায় আছে, শীঘ্রই পৌঁছে যাবে।" : o.status === "picked_up" ? " • পণ্য কিনে ফেলেছে, এখন রওনা হবে।" : " • আপনার অর্ডার নিয়েছে।"}</p>` : "<p class='muted'>রাইডারের জন্য অপেক্ষা করছি…</p>"}
+    ${o.status === "delivered" ? (rv ? `<p class="muted">⭐ আপনি এই অর্ডারে ${starRow(rv.stars)} রিভিউ দিয়েছেন — ধন্যবাদ!</p>` : (!reviewDismissed(o.code) ? `<button class="btn small gold" onclick="openReviewPopup('${o.code}')">⭐ রিভিউ দিন</button>` : "")) : ""}
     <p class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</p></div>`;
   }).join("") : "<p>এখনো কোনো অর্ডার নেই — প্রথম অর্ডার করলেই এখানে দেখাবে।</p>");
+  maybePromptReview(); // v38: delivered order → optional review popup, once per order
 }
 
 // ---------- Rider ----------
@@ -2411,6 +2511,7 @@ function renderAdmin() {
   ${adminOrderSection("❌ ক্যানসেল হয়েছে (সব)", all.filter(o => o.status === "cancelled"), false)}
   ${adminOrderSection("❌ কাস্টমার ক্যানসেল করেছে", all.filter(o => o.status === "cancelled" && o.cancelledBy === "customer"), false)}
   ${adminOrderSection("❌ রাইডার ক্যানসেল করেছে (অর্ডার আবার পুলে গেছে)", all.filter(o => (o.cancelHistory || []).length), true)}
+  ${adminReviewsHTML()}
   <h3>Rider Verification</h3>
   ${adminVerificationHTML(verifs, riders)}
   <h3>Daily Settlement — Tonight's Checklist (${t})</h3>
@@ -2761,7 +2862,7 @@ function renderAll() {
   if (adminBtn) adminBtn.classList.toggle("hidden", !s || s.role !== "admin");
   // v15: only render what exists on THIS page — each page has its own job.
   renderCats();
-  if (PAGE === "index.html") { renderCatTiles(); renderDeals(); }
+  if (PAGE === "index.html") { renderCatTiles(); renderDeals(); renderReviews(); }
   else if (PAGE === "categories.html") { renderProducts(); }
   else if (PAGE === "deals.html") { renderDeals(); }
   else if (PAGE === "product.html") { renderProductDetail(); }
