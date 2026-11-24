@@ -811,6 +811,9 @@ function renderProducts() {
   else if (sort === "name") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
   const title = $("#catTitle");
   if (title) title.textContent = activeCat === "All" ? `Our Recommendations — ${list.length} products` : `${activeCat} — ${list.length} products"`
+  // v28: the categories subtitle shows the LIVE catalog size (was hard-coded ২৩৬টি).
+  const ccl = $("#catCountLine");
+  if (ccl) ccl.textContent = bn(window.BAZARKORI_PRODUCTS.length.toLocaleString("en-US")) + "টি পণ্য — ক্যাটাগরি বেছে নিন, খুঁজুন, দাম দিয়ে সাজান। পণ্যে ক্লিক করলে বিস্তারিত দেখতে পাবেন।";
   grid.innerHTML = list.map(p => `<div class="card" onclick="openProduct(${p.id})">
     <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
     <div class="pad"><h3>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h3>
@@ -1026,7 +1029,7 @@ const STATUS_FLOW = ["placed", "accepted", "picked_up", "on_the_way", "delivered
 const STATUS_BN = {
   placed: "অর্ডার দেওয়া হয়েছে", accepted: "অর্ডার নেওয়া হয়েছে",
   picked_up: "পণ্য কেনা হয়েছে", on_the_way: "রাস্তায় আছে — বের হয়েছে",
-  delivered: "ডেলিভারি হয়েছে"
+  delivered: "ডেলিভারি হয়েছে", cancelled: "ক্যানসেল হয়েছে"
 };
 const fmtTime = ts => { if (!ts) return ""; try { return new Date(ts).toLocaleTimeString("bn-BD", { hour: "2-digit", minute: "2-digit" }) + " • " + new Date(ts).toLocaleDateString("bn-BD", { day: "numeric", month: "short" }); } catch { return ""; } };
 function recordStatus(o, st) { o.statusLog = Object.assign({}, o.statusLog, { [st]: new Date().toISOString() }); o.status = st; }
@@ -1113,13 +1116,14 @@ function renderTrackPopup() {
   ${trackJustPlaced ? `<div class="placed-check">✓</div><h2 style="margin:4px 0 0">অর্ডার কনফার্ম হয়েছে! 🎉</h2><p class="muted" style="margin:4px 0 0">অর্ডার নম্বর: <b>${o.code}</b> — রাইডার খুঁজছি…</p>` : `<h2 style="margin-top:0">📍 লাইভ ট্র্যাক — ${o.code}</h2>`}
   <p class="muted">${fmt(o.total)} • ${esc(o.area)} • ${esc(o.address || "")}</p>
   <p class="muted">⚖️ মোট ওজন: ${fmtKg(o.weightKg != null ? o.weightKg : cartWeightKg(o.items))} • ডেলিভারি চার্জ ${fmt(orderFee(o))}</p>
-  ${trackerHTML(o)}
+  ${o.status === "cancelled" ? `<p class="area-warn">❌ এই অর্ডারটি ক্যানসেল করা হয়েছে।</p>` : trackerHTML(o)}
   ${o.callConfirmedAt ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(o.callConfirmedAt)}</p>` : ""}
-  ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (কারণ: ${esc(o.cancelHistory[o.cancelHistory.length - 1].reason)})</p>` : ""}
-  <div class="track-timer ${t.cls}">${t.big}</div>
-  <p class="track-sub">${t.sub}</p>
+  ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (${esc(lastCancelText(o))})</p>` : ""}
+  ${o.status === "cancelled" ? "" : `<div class="track-timer ${t.cls}">${t.big}</div>
+  <p class="track-sub">${t.sub}</p>`}
   ${unmatched ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো রাইডার নেই</p>` : ""}
   ${o.rider ? `<p>🚴 রাইডার: <b>${esc(o.rider)}</b></p>` : `<p class="muted">রাইডার এখনো অর্ডারটি নেয়নি — কনফার্ম হলেই টাইমার শুরু হবে।</p>`}
+  ${(o.status === "placed" || o.status === "accepted") ? `<button class="btn danger" style="width:100%;margin-top:8px" onclick="askCustomerCancel('${o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : ""}
   <p class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</p>
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="closeTrackPopup()">ঠিক আছে — Close</button><button class="btn ghost" onclick="location.href='orders.html?track=${o.code}'">📍 My Orders-এ ট্র্যাক দেখুন</button></div></div>`;
 }
@@ -1192,10 +1196,11 @@ function renderMyOrders() {
     const log = o.statusLog || {};
     return `<div class="panel"><b>${o.code}</b> • ${fmt(o.total)} • ${esc(o.area)} • <span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>
     <button class="btn small gold" onclick="openTrackPopup('${o.code}')">📍 লাইভ ট্র্যাক</button>
+    ${(o.status === "placed" || o.status === "accepted") ? `<button class="btn small danger" onclick="askCustomerCancel('${o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : ""}
     ${o.status === "placed" && !ridersCovering(o.area).length ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো রাইডার নেই</p>` : ""}
-    <div class="timeline">${STEPS.map((st, i) => `<div class="step ${i < idx ? "done" : i === idx ? "now" : ""}">${i < idx ? "✓ " : ""}${st[1]}${log[st[0]] ? `<br><span class="muted">${fmtTime(log[st[0]])}</span>` : ""}</div>`).join("")}</div>
+    ${o.status === "cancelled" ? `<p class="area-warn">❌ এই অর্ডারটি ক্যানসেল করা হয়েছে।</p>` : `<div class="timeline">${STEPS.map((st, i) => `<div class="step ${i < idx ? "done" : i === idx ? "now" : ""}">${i < idx ? "✓ " : ""}${st[1]}${log[st[0]] ? `<br><span class="muted">${fmtTime(log[st[0]])}</span>` : ""}</div>`).join("")}</div>`}
     ${log.callConfirmed ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(log.callConfirmed)}</p>` : ""}
-    ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (কারণ: ${esc(o.cancelHistory[o.cancelHistory.length - 1].reason)})</p>` : ""}
+    ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (${esc(lastCancelText(o))})</p>` : ""}
     ${o.rider ? `<p>🚴 রাইডার: <b>${esc(o.rider)}</b>${o.status === "delivered" ? " • ডেলিভারি সম্পন্ন হয়েছে। ধন্যবাদ!" : o.status === "on_the_way" ? " • আপনার পার্সেল নিয়ে রাস্তায় আছে, শীঘ্রই পৌঁছে যাবে।" : o.status === "picked_up" ? " • পণ্য কিনে ফেলেছে, এখন রওনা হবে।" : " • আপনার অর্ডার নিয়েছে।"}</p>` : "<p class='muted'>রাইডারের জন্য অপেক্ষা করছি…</p>"}
     <p class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</p></div>`;
   }).join("") : "<p>এখনো কোনো অর্ডার নেই — প্রথম অর্ডার করলেই এখানে দেখাবে।</p>");
@@ -1214,7 +1219,7 @@ function renderRider() {
   const me = users().find(u => u.phone === s.phone) || s;
   // v25: re-broadcast pool skips orders THIS rider cancelled (declinedBy).
   const pool = orders().filter(o => o.status === "placed" && (me.areas || []).includes(o.area) && !(o.declinedBy || []).includes(me.name));
-  const mine = orders().filter(o => o.rider === me.name && o.status !== "delivered");
+  const mine = orders().filter(o => o.rider === me.name && o.status !== "delivered" && o.status !== "cancelled");
   const doneToday = orders().filter(o => o.rider === me.name && o.status === "delivered" && o.date === todayStr());
   const earnings = ordersFeeSum(doneToday), rd = riderDue(doneToday), due = rd.total; // v24: ৳5/unit service + 10% of delivery fees
   const pay = ls("bazar_payouts", []).find(p => p.rider === me.name && p.date === todayStr()) || { sent: 0, trxid: "" };
@@ -1244,6 +1249,7 @@ function renderRider() {
   <h3>🔔 New Orders (broadcast pool — first Accept wins)</h3>
   ${!me.verified || me.banned || !me.online ? "<p class='muted'>Go online as a verified rider to see new orders.</p>" : !(me.areas && me.areas.length) ? "<p class='muted'>আগে উপরে আপনার ডেলিভারি এলাকা ঠিক করুন — এলাকা ছাড়া অর্ডার আসবে না।</p>" : pool.length ? pool.map(o => `<div class="panel"><b>${o.code}</b> — ${fmt(o.total)} • ${esc(o.area)} • ${esc(o.address)}<br><span class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</span><br><button class="btn gold" onclick="acceptOrder('${o.code}')">Accept — I will deliver</button></div>`).join("") : "<p>No new orders right now.</p>"}
   <h3>My Active Deliveries</h3>
+  ${orders().filter(o => o.rider === me.name && o.status === "cancelled" && o.cancelledBy === "customer" && o.date === todayStr()).map(o => `<p class="area-warn">⚠️ কাস্টমার ক্যানসেল করেছে: <b>${esc(o.code)}</b></p>`).join("")}
   ${mine.length ? mine.map(o => {
     const idx = STATUS_FLOW.indexOf(o.status);
     const log = o.statusLog || {};
@@ -1318,7 +1324,14 @@ function acceptOrder(code) {
 // cancelling rider can never accept it again. Cancelled orders never count
 // in daily fee/service totals (only delivered orders ever count — see
 // riderDue/ordersFeeSum callers, which all filter status === "delivered").
-const CANCEL_REASONS = ["কাস্টমার অর্ডার নিবে না", "কাস্টমারকে ফোনে পাওয়া যাচ্ছে না", "ভুল ঠিকানা", "অন্য কারণ"];
+const CANCEL_REASONS = ["কাস্টমার অর্ডার নিবে না", "কাস্টমারকে ফোনে পাওয়া যাচ্ছে না", "ভুল ঠিকানা", "দোকানে পণ্য পাওয়া যাচ্ছে না", "অন্য কারণ"];
+// v28 helper: one line for the LAST rider cancel — reason + written note.
+// Used in the tracking popup, My Orders and the admin table.
+function lastCancelText(o) {
+  const c = (o.cancelHistory || [])[(o.cancelHistory || []).length - 1];
+  if (!c) return "";
+  return "কারণ: " + c.reason + (c.note ? " — " + c.note : "");
+}
 function confirmCall(code) {
   // Rider tapped "✅ কাস্টমার কনফার্ম করেছে" after calling the customer.
   const s = session(); if (!s || s.role !== "rider") return toast("Login as a rider first.");
@@ -1339,7 +1352,8 @@ function askCancel(code) {
     <p class="muted">অর্ডারটি আবার অন্য রাইডারদের কাছে যাবে। আপনি এই অর্ডারটি আর নিতে পারবেন না।</p>
     <label>ক্যানসেলের কারণ (আবশ্যক)</label>
     ${CANCEL_REASONS.map((r, i) => `<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="radio" name="cancelReason" value="${esc(r)}" style="width:auto" ${i === 0 ? "checked" : ""}> <span>${esc(r)}</span></label>`).join("")}
-    <label>নোট (ঐচ্ছিক)</label><input id="cancelNote" placeholder="যেমন: ৩ বার কল দিয়েছি, ধরেনি">
+    <label>নোট — কোন পণ্যটি পাননি / বিস্তারিত লিখুন</label><input id="cancelNote" placeholder="যেমন: Radhuni Oil 1L দোকানে পাওয়া যায়নি">
+    <p class="muted">পণ্য না পেয়ে বা "অন্য কারণ"-এ ক্যানসেল করলে নোট লেখা আবশ্যক — কাস্টমার আর অ্যাডমিন কারণটা দেখতে পাবে।</p>
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn danger" onclick="confirmCancel('${code}')">ক্যানসেল নিশ্চিত করুন</button><button class="btn ghost" onclick="closeModal()">ফিরে যান</button></div>
   </div>`);
 }
@@ -1347,6 +1361,11 @@ function confirmCancel(code) {
   const sel = document.querySelector('input[name="cancelReason"]:checked');
   const reason = sel ? sel.value : "";
   const note = ($("#cancelNote") && $("#cancelNote").value.trim()) || "";
+  if (!reason) return toast("ক্যানসেলের কারণ বেছে নিন।");
+  // v28: a written note is REQUIRED when the product was not found in the
+  // shop, or for "অন্য কারণ" — otherwise the customer/admin never learns
+  // WHICH product was missing.
+  if ((reason === "দোকানে পণ্য পাওয়া যাচ্ছে না" || reason === "অন্য কারণ") && !note) return toast("কোন পণ্যটি পাননি / কারণটা লিখে দিন।");
   closeModal();
   cancelOrder(code, reason, note);
 }
@@ -1372,6 +1391,35 @@ function cancelOrder(code, reason, note) {
   o.status = "placed";
   setOrders(all); syncOrderStatus(o); renderAll();
   notify(code + " ক্যানসেল হয়েছে — নতুন রাইডার খুঁজছি…");
+}
+// ---------- Customer cancel (v28) ----------
+// Tamim (24 Nov ~12:40): the customer can cancel until the rider marks
+// "পণ্য কিনেছি" — i.e. while status is placed or accepted. After picked_up
+// the cancel button disappears and cancelOrderByCustomer refuses. A
+// customer-cancelled order leaves the broadcast pool (pool filters status
+// === "placed"), never counts in totals (only delivered counts), and the
+// rider sees it vanish from "My Active Deliveries" (+ a notice line).
+function askCustomerCancel(code) {
+  const o = orders().find(x => x.code === code); if (!o) return;
+  if (o.status !== "placed" && o.status !== "accepted") return toast("রাইডার পণ্য কিনে ফেলেছে — এখন আর ক্যানসেল করা যাবে না।");
+  openModal(`<div class="pop">
+    <button class="pop-close" onclick="closeModal()" aria-label="Close">✕</button>
+    <h2>❌ অর্ডার ক্যানসেল করবেন?</h2>
+    <p>অর্ডার <b>${esc(code)}</b> (${fmt(o.total)}) ক্যানসেল হয়ে যাবে। রাইডার এখনো পণ্য কেনেনি, তাই এখনো ক্যানসেল করা যাচ্ছে।</p>
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn danger" onclick="cancelOrderByCustomer('${code}')">হ্যাঁ, ক্যানসেল করুন</button><button class="btn ghost" onclick="closeModal()">ফিরে যান</button></div>
+  </div>`);
+}
+function cancelOrderByCustomer(code) {
+  const s = session(); if (!s) return;
+  const all = orders(); const o = all.find(x => x.code === code); if (!o) return;
+  if (o.phone !== s.phone && o.customer !== s.name) return toast("এই অর্ডারটি আপনার নয়।");
+  if (o.status !== "placed" && o.status !== "accepted") return toast("রাইডার পণ্য কিনে ফেলেছে — এখন আর ক্যানসেল করা যাবে না।");
+  closeModal();
+  const now = new Date().toISOString();
+  o.status = "cancelled"; o.cancelledBy = "customer"; o.cancelledAt = now;
+  o.statusLog = Object.assign({}, o.statusLog, { cancelled: now });
+  setOrders(all); syncOrderStatus(o); renderAll();
+  notify(code + " ক্যানসেল হয়েছে।");
 }
 function setStatus(code, st) {
   // v7 guard: only the rider who accepted this order, and only the NEXT step —
@@ -1474,7 +1522,7 @@ function renderAdmin() {
     if (o.status === "delivered") timing = td.lateMs <= 0 ? `<span class="pill ok">${bn(Math.round(td.totalMs / 60000))} মিনিটে ✓ সময়মতো</span>` : `<span class="pill bad">${bn(Math.round(td.lateMs / 60000))} মিনিট দেরি</span>`;
     else if (o.status === "placed") timing = !ridersCovering(o.area).length ? `<span class="pill bad">⚠️ এই এলাকায় রাইডার নেই</span>` : `<span class="muted">রাইডার অপেক্ষায়</span>`;
     else timing = `<span class="js-countdown" data-code="${o.code}">${td.big}</span><br><span class="muted">${td.sub}</span>`;
-    return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>${(o.cancelHistory || []).length ? `<br><span class="muted">❌ ক্যানসেল: ${esc(o.cancelHistory[o.cancelHistory.length - 1].reason)} (${esc(o.cancelledBy || "")})</span>` : ""}</td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
+    return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>${o.status === "cancelled" && o.cancelledBy === "customer" ? `<br><span class="muted">❌ কাস্টমার ক্যানসেল করেছে</span>` : (o.cancelHistory || []).length ? `<br><span class="muted">❌ ক্যানসেল: ${esc(lastCancelText(o))} (${esc(o.cancelledBy || "")})</span>` : ""}</td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
   }).join("") : `<tr><td colspan="9">এখনো কোনো অর্ডার আসেনি — কাস্টমার অর্ডার করলেই এখানে দেখাবে।</td></tr>`}</table>
   <h3>Rider Verification</h3>
   ${verifs.length ? verifs.map((v, i) => `<div class="panel"><b>${esc(v.nidName)}</b> (${esc(v.rider)}) • NID ${esc(v.nid)} • ${esc(v.phone)} • <span class="pill ${v.status === "verified" ? "ok" : v.status === "rejected" ? "bad" : "warn"}">${v.status}</span><br>
