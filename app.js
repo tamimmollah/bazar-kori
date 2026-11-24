@@ -820,20 +820,49 @@ function renderProducts() {
     <div class="unit">${esc(p.unit)} • ${esc(p.category)}</div>
     <div class="row"><span class="price">${fmt(sellPrice(p))}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`).join("") || "<p>No products found.</p>";
 }
-// ---------- Popular products (v16): every price is the real MRP.
-// "আজকের জনপ্রিয় পণ্য" — the 6 most-bought products at their actual MRP.
-// ---------- Featured strip under the hero (v13) ----------
-const FEATURED = [["Radhuni Sunflower Oil", "1 L"], ["Coca-Cola Coke", "1 L"], ["Speed Can", "250 ml"], ["Pran Premium Ghee", "200 gm"], ["Lucky Strike Cool Crunch", "1 pack"]];
-const DEALS = [...FEATURED, ["Fresh Rice Bran Oil", "2 L"]];
+// ---------- Sales-driven Popular (v29) ----------
+// Tamim (24 Nov ~13:00): "আজকের জনপ্রিয় পণ্য" shows ONLY products that
+// actually sold — more than 15 units, counted from DELIVERED orders only
+// (placed/cancelled orders never count). Top 10 by units sold, most-sold
+// first. Until any product passes 15 sales the home strip hides itself and
+// the deals page shows an empty note. (The old hard-coded FEATURED/DEALS
+// list is gone — it showed products nobody had bought yet.)
+const POPULAR_MIN_SALES = 15; // strictly more than 15 units sold
+const POPULAR_MAX = 10;
+function productSales() {
+  // {productId: total units sold in delivered orders}
+  const sales = {};
+  for (const o of orders()) {
+    if (o.status !== "delivered") continue;
+    for (const i of (o.items || [])) {
+      if (typeof i.id !== "number") continue; // custom requests are not catalog products
+      sales[i.id] = (sales[i.id] || 0) + (i.qty || 1);
+    }
+  }
+  return sales;
+}
+function popularProducts() {
+  const sales = productSales();
+  return Object.entries(sales)
+    .filter(([, n]) => n > POPULAR_MIN_SALES)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, POPULAR_MAX)
+    .map(([id, n]) => ({ p: window.BAZARKORI_PRODUCTS.find(x => x.id === Number(id)), sold: n }))
+    .filter(x => x.p);
+}
 function renderDeals() {
   const el = $("#deals"); if (!el) return;
-  el.innerHTML = DEALS.map(([n, u]) => {
-    const p = window.BAZARKORI_PRODUCTS.find(x => x.name === n && x.unit === u); if (!p) return "";
-    return `<div class="card" onclick="openProduct(${p.id})">
-      <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
-      <div class="pad"><h3>${esc(p.name)}</h3><div class="unit">${esc(p.unit)}</div>
-      <div class="row"><span class="price">${fmt(sellPrice(p))}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`;
-  }).join("");
+  const list = popularProducts();
+  // Home strip: hide the whole section while nothing qualifies yet.
+  const sec = $("#popularSection");
+  if (sec) sec.style.display = list.length ? "" : "none";
+  el.innerHTML = list.length ? list.map(({ p, sold }) => `<div class="card" onclick="openProduct(${p.id})">
+    <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
+    <div class="pad"><h3>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h3>
+    <div class="unit">${esc(p.unit)} • ${esc(p.category)}</div>
+    <div class="row"><span class="price">${fmt(sellPrice(p))}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div>
+    <div class="muted">🔥 ${bn(sold)} বার বিক্রি হয়েছে</div></div></div>`).join("")
+    : (PAGE === "deals.html" ? "<p>এখনো কোনো পণ্য ১৫টির বেশি বিক্রি হয়নি — বিক্রি বাড়লেই জনপ্রিয় পণ্যগুলো এখানে আসবে।</p>" : "");
 }
 function renderFeatured() {
   // v13 featured strip is now the "আজকের জনপ্রিয় পণ্য" section; kept as an
