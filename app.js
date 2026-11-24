@@ -43,11 +43,15 @@ function shellHTML() {
   const cats = ["All", ...window.BAZARKORI_CATEGORIES];
   const active = (p) => PAGE === p ? " active" : "";
   return `
-<div class="topbar">
+<div class="topbar"><div class="topbar-track">
   <span>📍 Demra Thana + আশেপাশের এলাকা</span>
   <span>🚚 ফ্ল্যাট ৳৩০ ডেলিভারি • 💵 COD</span>
   <span>📞 <a href="tel:01865861015">01865-861015</a> • ⏰ খোলা: রাত ১২টা পর্যন্ত</span>
-</div>
+</div><div class="topbar-track" aria-hidden="true">
+  <span>📍 Demra Thana + আশেপাশের এলাকা</span>
+  <span>🚚 ফ্ল্যাট ৳৩০ ডেলিভারি • 💵 COD</span>
+  <span>📞 <a href="tel:01865861015">01865-861015</a> • ⏰ খোলা: রাত ১২টা পর্যন্ত</span>
+</div></div>
 <header>
   <div class="hdr-row">
     <a class="logo" href="index.html" style="text-decoration:none"><img class="logo-img" src="logo.png" alt="বাজার করি"><span class="logo-tag">তাজা। সস্তা। ২৫ মিনিটে।</span></a>
