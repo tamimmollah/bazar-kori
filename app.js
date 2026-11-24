@@ -361,6 +361,70 @@ function goTo(id) {
   const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth" });
 }
 let activeCat = "All";
+// ---------- Bilingual search (v15.1) ----------
+// Bangla word → English synonyms, so typing বাংলায় finds the English-named
+// products (e.g. "তেল" → oil, "চাল" → rice). Matching is case-insensitive
+// and substring-based; every query word must match (directly or via a synonym).
+const BN_EN = {
+  "তেল": ["oil"], "চাল": ["rice"], "ভাত": ["rice"], "চিনি": ["sugar"],
+  "লবণ": ["salt"], "লবন": ["salt"], "ডাল": ["lentil", "dal", "pulse"],
+  "দুধ": ["milk"], "ডিম": ["egg"], "সাবান": ["soap"],
+  "শ্যাম্পু": ["shampoo"], "চা": ["tea"], "কফি": ["coffee"],
+  "বিস্কুট": ["biscuit", "cookies"], "চকলেট": ["chocolate"],
+  "মসলা": ["spice", "masala"], "আটা": ["flour"], "ময়দা": ["flour"],
+  "পানি": ["water"], "জুস": ["juice"],
+  "কোল্ড ড্রিংকস": ["soft drink", "cold drink", "beverage", "drinks"],
+  "সিগারেট": ["cigarette"], "পেঁয়াজ": ["onion"], "আলু": ["potato"],
+  "টমেটো": ["tomato"], "মরিচ": ["chili", "chilli", "pepper"],
+  "আদা": ["ginger"], "রসুন": ["garlic"], "মাছ": ["fish"],
+  "মাংস": ["meat"], "মুরগি": ["chicken"], "গরু": ["beef"],
+  "ফল": ["fruit"], "আপেল": ["apple"], "কলা": ["banana"],
+  "পাউরুটি": ["bread"], "নুডলস": ["noodles"], "ঘি": ["ghee"],
+  "মধু": ["honey"], "আইসক্রিম": ["ice cream"], "কেক": ["cake"],
+  "টিস্যু": ["tissue"], "ডিটারজেন্ট": ["detergent"],
+  "ভেপ": ["vape"], "টুথপেস্ট": ["toothpaste"],
+  "ফেসওয়াশ": ["face wash"], "ক্রিম": ["cream"], "লোশন": ["lotion"],
+  "সস": ["sauce"], "মেয়োনিজ": ["mayonnaise"], "চিপস": ["chips"],
+  "বাদাম": ["nuts", "nut"], "খেজুর": ["dates", "date"], "সেমাই": ["vermicelli"],
+  "সুজি": ["semolina"], "মিষ্টি": ["sweet"], "পাউডার": ["powder"],
+  "হলুদ": ["turmeric"], "জিরা": ["cumin"], "ধনিয়া": ["coriander"],
+  "এলাচ": ["cardamom"], "দারচিনি": ["cinnamon"], "লবঙ্গ": ["clove"],
+  "গোলমরিচ": ["black pepper"], "সরিষা": ["mustard"], "নারকেল": ["coconut"],
+  "সয়াবিন": ["soybean", "soyabean"], "সরিষার তেল": ["mustard oil"],
+  "চিনাবাদাম": ["peanut"], "কাজু": ["cashew"], "কিশমিশ": ["raisin"],
+  "পানীয়": ["drinks", "beverage"], "সবজি": ["vegetable"],
+  "লেবু": ["lemon"], "কমলা": ["orange"], "আঙুর": ["grapes"],
+  "পেয়ারা": ["guava"], "আম": ["mango"], "বেসন": ["gram flour", "besan"],
+  "মশা": ["mosquito"], "স্যানিটারি": ["sanitary"], "ডায়াপার": ["diaper"]
+};
+// Bangla label for each of the 22 categories, so a Bangla category word
+// (e.g. "পানীয়", "আইসক্রিম") matches every product in that category.
+const CAT_BN = {
+  "Groceries": "মুদি বাজার", "Drinks & Beverages": "পানীয়",
+  "Munchies": "হালকা খাবার", "Tong & Smokestore": "সিগারেট",
+  "Smokeless & Vape": "ভেপ", "Sexual Wellness": "যৌন স্বাস্থ্য",
+  "Pharmacy": "ঔষধ ফার্মেসি", "Ice Cream": "আইসক্রিম",
+  "Sweets & Bakery": "মিষ্টি বেকারি", "Frozen Food": "ফ্রোজেন খাবার",
+  "Feminine Care": "মহিলাদের যত্ন", "Baby Essentials": "শিশুর প্রয়োজনীয়",
+  "Cleaning Essentials": "পরিষ্কার", "Bathroom Essentials": "বাথরুম",
+  "Restaurants": "রেস্টুরেন্ট", "Street Foods": "স্ট্রিট ফুড",
+  "Gym Essentials": "জিম", "Student Corner": "ছাত্র",
+  "Party Store": "পার্টি", "Stationery": "স্টেশনারি",
+  "Fruit & Vegetables": "ফল সবজি", "Meat & Fish": "মাছ মাংস"
+};
+function productMatches(p, q) {
+  q = (q || "").toLowerCase().trim();
+  if (!q) return true;
+  const hay = (p.name + " " + p.unit + " " + p.category + " " + (CAT_BN[p.category] || "")).toLowerCase();
+  if (hay.includes(q)) return true; // direct substring, English or Bangla
+  // Multi-word Bangla phrases first, e.g. "কোল্ড ড্রিংকস" → soft drink.
+  for (const k of Object.keys(BN_EN)) {
+    if (k.indexOf(" ") !== -1 && q.indexOf(k) !== -1 && BN_EN[k].some(s => hay.includes(s))) return true;
+  }
+  // Every word must match directly or through its Bangla→English synonyms.
+  return q.split(/\s+/).filter(Boolean).every(t =>
+    hay.includes(t) || (BN_EN[t] || []).some(s => hay.includes(s)));
+}
 function renderCats() {
   const cats = ["All", ...window.BAZARKORI_CATEGORIES];
   const chips = $("#cats");
@@ -387,7 +451,7 @@ function renderProducts() {
   const grid = $("#grid"); if (!grid) return;
   const searchEl = $("#search");
   const q = ((searchEl ? searchEl.value : qp("q")) || "").toLowerCase();
-  let list = window.BAZARKORI_PRODUCTS.filter(p => (activeCat === "All" || p.category === activeCat) && (!q || (p.name + " " + p.unit + " " + p.category).toLowerCase().includes(q)));
+  let list = window.BAZARKORI_PRODUCTS.filter(p => (activeCat === "All" || p.category === activeCat) && productMatches(p, q));
   const sortEl = $("#sortSelect");
   const sort = (sortEl && sortEl.value) || qp("sort") || "";
   if (sort === "low") list = [...list].sort((a, b) => a.price - b.price);
@@ -963,7 +1027,39 @@ function renderAll() {
   const newCount = orders().filter(o => o.status === "placed").length;
   const b = $("#orderBadge"); if (b) { b.textContent = newCount; b.classList.toggle("hidden", !newCount); }
 }
-seed(); mountShell(); initSupabase(); initPageParams(); renderAll();
+// ---------- Init (v15.1) ----------
+// BUG (v15, found live): categories.html grid was EMPTY on first load —
+// products only appeared after clicking a chip and then "All".
+// Root cause: the first render ran ONLY as the last step of one long init
+// chain (seed → mountShell → initSupabase → initPageParams → renderAll), so
+// if ANY earlier step threw — e.g. a stale cached v14 app.js, whose
+// renderAll() touched #whoami / #view-admin / #orderBadge WITHOUT guards and
+// died before renderProducts() ever ran — the grid stayed empty, while the
+// hoisted setCat() still worked from chip clicks (exactly the live symptom).
+// Fix: (1) run each init step in its own try/catch so one failure can never
+// kill the render; (2) re-render on DOMContentLoaded as a safety net, forcing
+// the "All" filter on categories.html; renderAll/renderProducts are
+// idempotent, so the extra render is harmless.
+function initApp() {
+  try { seed(); } catch (e) { console.warn("seed failed", e); }
+  try { mountShell(); } catch (e) { console.warn("mountShell failed", e); }
+  try { initSupabase(); } catch (e) { console.warn("initSupabase failed", e); }
+  try { initPageParams(); } catch (e) { console.warn("initPageParams failed", e); }
+  try { renderAll(); } catch (e) { console.warn("renderAll failed", e); }
+}
+initApp();
+if (typeof document !== "undefined" && document.addEventListener) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      try {
+        if (PAGE === "categories.html") { activeCat = qp("cat") || "All"; renderCats(); renderProducts(); }
+        else renderAll();
+      } catch (e) { console.warn("DOMContentLoaded re-render failed", e); }
+    });
+  } else if (PAGE === "categories.html") {
+    try { renderProducts(); } catch (e) { console.warn("categories re-render failed", e); }
+  }
+}
 // Poll every 8s so an order placed in another tab/device appears (Supabase realtime does this live when configured).
 setInterval(() => { renderAll(); }, 8000);
 // 1-second tick: live countdown popup + rider/admin countdowns.
