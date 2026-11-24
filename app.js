@@ -52,7 +52,7 @@ function shellHTML() {
   <div class="hdr-row">
     <a class="logo" href="index.html" style="text-decoration:none"><img class="logo-img" src="logo.png" alt="বাজার করি"><span class="logo-tag">তাজা। সস্তা। ২৫ মিনিটে।</span></a>
     <div class="hdr-actions">
-      <button class="icon-btn" onclick="location.href='cart.html'" aria-label="কার্ট">🛒 <span class="hdr-count" id="cartCount">0</span></button>
+      <button class="icon-btn" onclick="openCartPopup()" aria-label="কার্ট">🛒 <span class="hdr-count" id="cartCount">0</span></button>
       <button class="icon-btn" onclick="location.href='orders.html'" aria-label="My Orders">📦 <span class="badge hidden" id="orderBadge">0</span></button>
       <button class="btn ghost hdr-login" id="loginBtn" onclick="location.href='login.html'">Login / Register</button>
       <button class="btn ghost hidden hdr-admin" id="adminBtn" onclick="location.href='admin.html'">Admin</button>
@@ -142,6 +142,30 @@ function goSearch() { const v = ($("#hdrSearch") && $("#hdrSearch").value) || ""
 
 // ---------- Seed data ----------
 function seed() {
+  // Migration (v19): DELETE the demo orders seeded by v1–v18. A fresh account
+  // must show NOTHING until that person actually places an order. Only
+  // orders matching ALL THREE parts of the seed's own fingerprint are
+  // deleted — a real order can never match all three at once:
+  //   code LN-1001…LN-1006 AND customer "Demo Customer 1/2"
+  //   AND phone 01710000002/01710000003.
+  // Runs on every load (before the bazar_seeded early-return below) so
+  // browsers that already hold the fake orders get cleaned on first v19 load.
+  try {
+    const DEMO_CODES = ["LN-1001", "LN-1002", "LN-1003", "LN-1004", "LN-1005", "LN-1006"];
+    const DEMO_CUSTOMERS = ["Demo Customer 1", "Demo Customer 2"];
+    const DEMO_PHONES = ["01710000002", "01710000003"];
+    const cur = orders();
+    const kept = cur.filter(o => !(DEMO_CODES.includes(o.code) && DEMO_CUSTOMERS.includes(o.customer) && DEMO_PHONES.includes(o.phone)));
+    if (kept.length !== cur.length) setOrders(kept);
+    // Demo-derived rows the seed also wrote: fake payout (TrxID "DEMO…")
+    // and fake NID verification (NID 1234567890 for demo rider Rahim).
+    const ps = ls("bazar_payouts", []);
+    const keptPs = ps.filter(p => !(typeof p.trxid === "string" && p.trxid.indexOf("DEMO") === 0));
+    if (keptPs.length !== ps.length) save("bazar_payouts", keptPs);
+    const vs = ls("bazar_verifications", []);
+    const keptVs = vs.filter(v => !(v.phone === "01710000006" && v.nid === "1234567890"));
+    if (keptVs.length !== vs.length) save("bazar_verifications", keptVs);
+  } catch {}
   // Migration (v11 rename): copy old "lagbe_*" localStorage keys to "bazar_*"
   // once, so existing accounts/orders/sessions survive the rename.
   try {
@@ -189,27 +213,15 @@ function seed() {
     { phone: "01710000006", name: "Rahim Rider", role: "rider", pass: "demo123", area: "Sarulia", areas: [], verified: false, vstatus: "pending", online: false, banned: false }
   ];
   save("bazar_users", users);
-  const mk = (code, cust, phone, items, status, rider, area) => {
-    const sub = items.reduce((a, i) => a + i.price * i.qty, 0);
-    const created = new Date(Date.now() - 1000 * 60 * 45).toISOString();
-    // Seeded demo orders get a plausible per-step timestamp trail.
-    const log = { placed: created };
-    const flow = ["accepted", "picked_up", "on_the_way", "delivered"];
-    const upto = flow.indexOf(status);
-    flow.slice(0, upto + 1).forEach((st, i) => { log[st] = new Date(Date.now() - 1000 * 60 * (40 - i * 8)).toISOString(); });
-    return { code, customer: cust, phone, area, items, subtotal: sub, fee: DELIVERY_FEE, total: sub + DELIVERY_FEE, status, statusLog: log, rider: rider || "", created, date: todayStr() };
-  };
-  save("bazar_orders", [
-    mk("LN-1001", "Demo Customer 1", "01710000002", [{ id: 1, name: "Radhuni Sunflower Oil 1 L", price: 550, qty: 1 }], "delivered", "Karim Rider", "Demra"),
-    mk("LN-1002", "Demo Customer 1", "01710000002", [{ id: 40, name: "Coca-Cola Coke 1 L", price: 95, qty: 2 }], "delivered", "Karim Rider", "Demra"),
-    mk("LN-1003", "Demo Customer 2", "01710000003", [{ id: 55, name: "Speed Can 250 ml", price: 65, qty: 1 }], "on_the_way", "Karim Rider", "Jatrabari"),
-    mk("LN-1004", "Demo Customer 2", "01710000003", [{ id: 70, name: "Lucky Strike 1 pack", price: 245, qty: 1 }], "accepted", "Sumon Rider", "Matuail"),
-    mk("LN-1005", "Demo Customer 1", "01710000002", [{ id: 20, name: "Pran Premium Ghee 200 gm", price: 350, qty: 1 }], "placed", "", "Demra"),
-    mk("LN-1006", "Demo Customer 2", "01710000003", [{ id: 30, name: "Aarong Low Fat Yogurt 500 gm", price: 125, qty: 1 }], "picked_up", "Karim Rider", "Sarulia")
-  ]);
-  save("bazar_payouts", [{ rider: "Karim Rider", date: todayStr(), orders: 2, earnings: 60, due: 6, sent: 6, trxid: "DEMO9HX7K2" }]);
-  save("bazar_settlements", []);
-  save("bazar_verifications", [{ rider: "Rahim Rider", phone: "01710000006", nidName: "Md Rahim Uddin", nid: "1234567890", status: "pending", photo: "", front: "", back: "" }]);
+  // v19: NO demo orders anymore. A brand-new account sees NOTHING until it
+  // actually places an order — the old seed wrote 6 fake orders (LN-1001…
+  // LN-1006) that showed up in Live Tracking, Admin and the rider pool.
+  // Orders / payouts / settlements / verifications all start empty.
+  // (Only initialise keys that are absent — never overwrite existing data.)
+  if (localStorage.getItem("bazar_orders") === null) save("bazar_orders", []);
+  if (localStorage.getItem("bazar_payouts") === null) save("bazar_payouts", []);
+  if (localStorage.getItem("bazar_settlements") === null) save("bazar_settlements", []);
+  if (localStorage.getItem("bazar_verifications") === null) save("bazar_verifications", []);
   save("bazar_seeded", true);
 }
 const users = () => ls("bazar_users", []);
@@ -252,6 +264,7 @@ function emailOrderNotify(o) {
 // there is NO rider panel on the website anymore).
 function openAuth() {
   const b = $("#modalBody");
+  b.classList.remove("wide"); // v20: login sheet is narrow even after a wide cart popup
   b.innerHTML = `<img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>লগইন</h2>
   <p class="muted">ফোন নম্বর ও পাসওয়ার্ড দিয়ে লগইন করুন। নতুন হলে নিচে রেজিস্টার করুন।</p>
   <label>ফোন নম্বর</label><input id="aPhone" placeholder="01XXXXXXXXX">
@@ -354,7 +367,29 @@ function syncProfileToSupabase(u) {
   try { sb.from("profiles").upsert([{ phone: u.phone, name: u.name, role: u.role, password_hash: u.pass || "", area: u.area || null, address: u.address || null }], { onConflict: "phone" }).then(() => {}).catch(() => {}); } catch (e) {}
 }
 function logout() { localStorage.removeItem("bazar_session"); renderAll(); toast("Logged out."); if (PAGE === "admin.html" || PAGE === "orders.html") location.href = "index.html"; }
-function closeModal() { trackCode = null; $("#modal").classList.remove("open"); }
+function closeModal() { trackCode = null; $("#modal").classList.remove("open"); $("#modalBody").classList.remove("wide"); }
+// ---------- Reusable popup (modal) system (v20) ----------
+// One overlay for every popup: product detail, cart/checkout, login, track.
+// Tap outside the sheet or press ESC to close; opening a popup never
+// triggers the v17 quiet-sync rebuild (userIsBusy() returns true while
+// the modal is open). Focus lands on the ✕ button for keyboard users.
+let _modalBound = false;
+function openModal(html, opts) {
+  const b = $("#modalBody");
+  b.innerHTML = html;
+  b.classList.toggle("wide", !!(opts && opts.wide));
+  $("#modal").classList.add("open");
+  const f = b.querySelector(".pop-close");
+  if (f) { try { f.focus(); } catch (e) {} }
+}
+function bindModalDismiss() {
+  if (_modalBound) return; _modalBound = true;
+  const m = $("#modal"); if (!m) return;
+  m.addEventListener("click", (e) => { if (e.target === m) closeModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { const mm = $("#modal"); if (mm && mm.classList.contains("open")) closeModal(); }
+  });
+}
 function requireLogin(role) { const s = session(); if (!s) { openAuth(); return null; } return s; }
 
 // ---------- Storefront ----------
@@ -411,6 +446,63 @@ const BN_EN = {
   "পেয়ারা": ["guava"], "আম": ["mango"], "বেসন": ["gram flour", "besan"],
   "মশা": ["mosquito"], "স্যানিটারি": ["sanitary"], "ডায়াপার": ["diaper"]
 };
+// Romanized Bangla (Banglish) word → English synonyms, so typing Bangla in
+// English letters finds the same products (e.g. "tel" → oil, "chal" →
+// rice, "chini" → sugar). Same word-boundary rule as BN_EN: the English
+// terms only match whole words (or word starts) in the product name.
+const ROMAN_BN = {
+  "tel": ["oil"], "teler": ["oil"], "chal": ["rice"], "chaler": ["rice"],
+  "chini": ["sugar"], "lobon": ["salt"], "dal": ["lentil", "dal", "pulse"],
+  "dudh": ["milk"], "dudher": ["milk"], "dim": ["egg"], "dimer": ["egg"],
+  "saban": ["soap"], "shampoo": ["shampoo"], "cha": ["tea"],
+  "coffee": ["coffee"], "biscuit": ["biscuit"], "chocolate": ["chocolate"],
+  "mosla": ["spice", "masala"], "gorom mosla": ["garam masala"],
+  "ata": ["flour"], "atta": ["flour"], "moyda": ["flour"],
+  "pani": ["water"], "juice": ["juice"], "cigarette": ["cigarette"],
+  "peyaj": ["onion"], "peyajer": ["onion"], "alu": ["potato"],
+  "aloo": ["potato"], "tomato": ["tomato"], "tamatar": ["tomato"],
+  "morich": ["chili", "chilli", "pepper"], "ada": ["ginger"],
+  "roshun": ["garlic"], "mach": ["fish"], "mangsho": ["meat"],
+  "murgi": ["chicken"], "goru": ["beef"], "fol": ["fruit"],
+  "apel": ["apple"], "kola": ["banana"], "ghee": ["ghee"],
+  "modhu": ["honey"], "honey": ["honey"], "icecream": ["ice cream"],
+  "tissue": ["tissue"], "detergent": ["detergent"], "vape": ["vape"],
+  "toothpaste": ["toothpaste"], "shorisha": ["mustard"],
+  "shorishar tel": ["mustard oil"], "holud": ["turmeric"],
+  "jira": ["cumin"], "dhonia": ["coriander"], "lobongo": ["clove"],
+  "elach": ["cardamom"], "darchini": ["cinnamon"],
+  "tejpata": ["bay leaf"], "shuji": ["semolina"],
+  "chira": ["flattened rice"], "muri": ["puffed rice"],
+  "gur": ["jaggery"], "narkel": ["coconut"], "badam": ["nuts", "nut"],
+  "kaju": ["cashew"], "kishmish": ["raisin"], "khejur": ["dates", "date"],
+  "doi": ["yogurt"], "ponir": ["cheese"], "makhon": ["butter"],
+  "cream": ["cream"], "cake": ["cake"], "chips": ["chips"],
+  "noodles": ["noodles"], "pasta": ["pasta"], "sauce": ["sauce"],
+  "achar": ["pickle"], "jam": ["jam"], "jelly": ["jelly"],
+  "powder": ["powder"], "lotion": ["lotion"],
+  "facewash": ["face wash"], "brush": ["brush"], "razor": ["razor"],
+  "blade": ["blade"], "napkin": ["napkin"], "diaper": ["diaper"],
+  "baby": ["baby"], "medicine": ["medicine"], "syrup": ["syrup"],
+  "tablet": ["tablet"], "capsule": ["capsule"], "condom": ["condom"],
+  "sanitary": ["sanitary"], "pad": ["pad"], "agarbatti": ["incense"],
+  "mombati": ["candle"], "match": ["match"], "coil": ["coil"],
+  "spray": ["spray"], "air freshener": ["air freshener"],
+  "phenyl": ["phenyl"], "harpic": ["harpic"], "vim": ["vim"],
+  "surf": ["surf"], "wheel": ["wheel"], "rin": ["rin"], "lux": ["lux"],
+  "lifebuoy": ["lifebuoy"], "dettol": ["dettol"], "savlon": ["savlon"],
+  "pepsodent": ["pepsodent"], "colgate": ["colgate"],
+  "closeup": ["closeup", "close up"], "sunsilk": ["sunsilk"],
+  "dove": ["dove"], "ponds": ["ponds"], "fair": ["fair"],
+  "vaseline": ["vaseline"], "nivea": ["nivea"], "parachute": ["parachute"],
+  "dabur": ["dabur"], "himalaya": ["himalaya"],
+  "pawruti": ["bread"], "semai": ["vermicelli"], "misty": ["sweet"],
+  "misti": ["sweet"], "beson": ["gram flour", "besan"],
+  "mosha": ["mosquito"], "lebu": ["lemon"], "komola": ["orange"],
+  "angur": ["grapes"], "peyara": ["guava"], "aam": ["mango"],
+  "sobji": ["vegetable"], "paniyo": ["drinks", "beverage"],
+  "chinabadam": ["peanut"], "soya": ["soybean", "soyabean"],
+  "soyabean": ["soybean", "soyabean"]
+};
 // Bangla label for each of the 22 categories, so a Bangla category word
 // (e.g. "পানীয়", "আইসক্রিম") matches every product in that category.
 const CAT_BN = {
@@ -466,8 +558,19 @@ function productMatches(p, q) {
     return q.split(/\s+/).filter(Boolean).every(t =>
       hay.includes(t) || (BN_EN[t] || []).some(s => termMatches(p, s)));
   }
-  // English query: every word must match on word boundaries.
-  return q.split(/\s+/).filter(Boolean).every(t => termMatches(p, t));
+  // English query: every word must match on word boundaries — directly,
+  // or through its Romanized-Bangla→English expansion ("tel" → oil).
+  // Multi-word Roman phrases first, e.g. "gorom mosla" → garam masala.
+  for (const k of Object.keys(ROMAN_BN)) {
+    if (k.indexOf(" ") !== -1 && q.indexOf(k) !== -1 && ROMAN_BN[k].some(s => termMatches(p, s))) return true;
+  }
+  return q.split(/\s+/).filter(Boolean).every(t => {
+    // A Romanized-Bangla word is Bangla written in Latin letters, NOT
+    // English — match it ONLY through its English expansion, never raw:
+    // raw prefix matching would let "chini" hit "Chinigura" rice.
+    if (ROMAN_BN[t]) return ROMAN_BN[t].some(s => termMatches(p, s));
+    return termMatches(p, t);
+  });
 }
 function renderCats() {
   const cats = ["All", ...window.BAZARKORI_CATEGORIES];
@@ -537,10 +640,53 @@ function renderFeatured() {
   // alias so any older caller still works.
   renderDeals();
 }
+// ---------- Product detail POPUP (v20) ----------
+// Tapping a product card opens a popup on the SAME page — no navigation.
+// product.html stays as a fallback for direct links (?id=).
+let popQty = 1, popProductId = null;
 function openProduct(id) {
   const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return;
   if (is18(p) && !confirm("Age Verification: you must be 18+ to view this product. Are you 18 or older?")) return;
-  location.href = "product.html?id=" + id;
+  openProductPopup(id);
+}
+function openProductPopup(id) {
+  const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return;
+  popQty = 1; popProductId = id;
+  openModal(`<div class="pop">
+    <button class="pop-close" onclick="closeModal()" aria-label="Close">✕</button>
+    <div class="pop-img"><img src="${p.img}" alt="${esc(p.name)}" onerror="this.onerror=null;this.src='logo.png'"></div>
+    <h2 class="pop-title">${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h2>
+    <p class="pop-unit">Size: <b>${esc(p.unit)}</b> • Category: <b>${esc(p.category)}</b></p>
+    <p class="pop-price">${fmt(p.price)}</p>
+    <p class="muted">আসল MRP — কোনো ছাড় নেই • In stock • ২৫ মিনিটে ডেলিভারি • ফ্ল্যাট ৳৩০ • Cash on Delivery${is18(p) ? " • Discreet Stealth Pack." : ""}</p>
+    <div class="qty-row"><button class="qty-btn" onclick="popQtyChange(-1)" aria-label="Decrease quantity">−</button><span id="popQty">1</span><button class="qty-btn" onclick="popQtyChange(1)" aria-label="Increase quantity">+</button>
+    <button class="btn gold" id="popAddBtn" onclick="addPopToCart()">Add to Cart — ${fmt(p.price)}</button></div>
+    <button class="btn ghost" style="width:100%" onclick="openCartPopup()">🛒 View Cart</button>
+    <p style="text-align:center"><a href="javascript:void(0)" onclick="closeModal()">← Continue shopping</a></p>
+  </div>`);
+}
+function popQtyChange(d) {
+  popQty = Math.max(1, popQty + d);
+  const q = $("#popQty"); if (q) q.textContent = popQty;
+  const p = window.BAZARKORI_PRODUCTS.find(x => x.id === popProductId);
+  const b = $("#popAddBtn"); if (b && p) b.textContent = "Add to Cart — " + fmt(p.price * popQty);
+}
+function addToCartQty(id, qty) {
+  const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return;
+  const c = cart(); const f = c.find(x => x.id === id);
+  if (f) f.qty += qty; else c.push({ id, name: p.name + " " + p.unit, price: p.price, qty, img: p.img });
+  setCart(c); renderCart();
+}
+function addPopToCart() {
+  if (!popProductId) return;
+  addToCartQty(popProductId, popQty);
+  const p = window.BAZARKORI_PRODUCTS.find(x => x.id === popProductId);
+  toast("🛒 " + (p ? p.name : "") + " added.");
+  const b = $("#popAddBtn");
+  if (b) {
+    const old = b.textContent; b.textContent = "✓ Added"; b.disabled = true;
+    setTimeout(() => { const bb = $("#popAddBtn"); if (bb) { bb.textContent = old; bb.disabled = false; } }, 1200);
+  }
 }
 
 // ---------- Cart & Checkout ----------
@@ -549,7 +695,7 @@ const setCart = c => save("bazar_cart", c);
 function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); toast(p.name + " added."); }
 function addCustomItem() { const inp = $("#customItem"); if (!inp) return; const v = inp.value.trim(); if (!v) return; const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, qty: 1, img: "" }); setCart(c); inp.value = ""; renderCart(); toast("Custom item added — we will confirm its price."); }
 function changeQty(id, d) { const c = cart(); const f = c.find(x => String(x.id) === String(id)); if (!f) return; f.qty += d; if (f.qty <= 0) c.splice(c.indexOf(f), 1); setCart(c); renderCart(); }
-function toggleCart() { location.href = "cart.html"; }
+function toggleCart() { openCartPopup(); }
 function renderCart() {
   const c = cart(); const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
   const cc = $("#cartCount"); if (cc) cc.textContent = c.reduce((a, i) => a + i.qty, 0);
@@ -572,19 +718,90 @@ function renderCart() {
   <label>Full Address</label><input id="coAddr" placeholder="House, road, area" value="${esc(dAddr)}"><label>Your Name</label><input id="coName" placeholder="Name" value="${esc(dName)}"><label>Phone</label><input id="coPhone" placeholder="01XXXXXXXXX" value="${esc(dPhone)}">
   <button class="btn" style="width:100%;margin-top:8px" onclick="placeOrder()">Place Order — Cash on Delivery</button>` : "";
 }
+// ---------- Shared order creation (v20) ----------
+// Used by the cart page AND the cart popup — one code path, one order code
+// sequence, so the two can never drift apart.
+function createOrder(name, phone, addr, area) {
+  const s = session();
+  const c = cart(); if (!c.length) return null;
+  // Remember what the customer used at checkout, so next time it auto-fills.
+  if (s && s.role === "customer") saveProfileData(s.phone, { name, phone, address: addr, area });
+  const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
+  // v19: unique order code from the highest existing one. Length-based
+  // codes could collide after the v19 demo-order cleanup shrank the list
+  // (e.g. 6 real orders left → next code would repeat an existing one).
+  const nextNum = Math.max(1000, ...orders().map(o => { const m = /^LN-(\d+)$/.exec(o.code || ""); return m ? Number(m[1]) : 0; })) + 1;
+  const o = { code: "LN-" + nextNum, customer: name, phone, area, address: addr, items: c, subtotal: sub, fee: DELIVERY_FEE, total: sub + DELIVERY_FEE, status: "placed", statusLog: { placed: new Date().toISOString() }, rider: "", created: new Date().toISOString(), date: todayStr() };
+  const all = orders(); all.unshift(o); setOrders(all); setCart([]);
+  notify("Order " + o.code + " placed! Broadcasting to online riders…");
+  emailOrderNotify(o); // fire-and-forget; admin badge/sound above still fires regardless
+  if (LIVE && sb) sb.from("orders").insert([{ order_code: o.code, customer_name: name, customer_phone: phone, delivery_address: addr, area, items: c, subtotal_bdt: sub, delivery_fee_bdt: DELIVERY_FEE, total_bdt: o.total, status: "placed" }]).then(() => {});
+  return o;
+}
 function placeOrder() {
   const s = requireLogin("customer"); if (!s) return;
   const c = cart(); if (!c.length) return toast("Cart is empty.");
   const name = $("#coName").value.trim() || s.name, phone = $("#coPhone").value.trim() || s.phone, addr = $("#coAddr").value.trim(), area = $("#coArea").value;
   if (!addr || !phone) return toast("Enter address and phone.");
-  // Remember what the customer used at checkout, so next time it auto-fills.
-  if (s.role === "customer") saveProfileData(s.phone, { name, phone, address: addr, area });
-  const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
-  const o = { code: "LN-" + (1000 + orders().length + 1), customer: name, phone, area, address: addr, items: c, subtotal: sub, fee: DELIVERY_FEE, total: sub + DELIVERY_FEE, status: "placed", statusLog: { placed: new Date().toISOString() }, rider: "", created: new Date().toISOString(), date: todayStr() };
-  const all = orders(); all.unshift(o); setOrders(all); setCart([]); renderCart(); renderAll();
-  notify("Order " + o.code + " placed! Broadcasting to online riders…");
-  emailOrderNotify(o); // fire-and-forget; admin badge/sound above still fires regardless
-  if (LIVE && sb) sb.from("orders").insert([{ order_code: o.code, customer_name: name, customer_phone: phone, delivery_address: addr, area, items: c, subtotal_bdt: sub, delivery_fee_bdt: DELIVERY_FEE, total_bdt: o.total, status: "placed" }]).then(() => {});
+  const o = createOrder(name, phone, addr, area); if (!o) return;
+  renderCart(); renderAll();
+  location.href = "orders.html?track=" + o.code; // orders page auto-opens the live countdown popup
+}
+
+// ---------- Cart / checkout POPUP (v20) ----------
+// The cart button opens this popup instead of navigating to cart.html.
+// cart.html still works as a fallback (direct link). The popup reuses the
+// same data and totals; its form fields use p-prefixed IDs so they never
+// collide with the cart page's identical fields behind the overlay.
+function openCartPopup() {
+  openModal(`<div class="pop pop-cart">
+    <button class="pop-close" onclick="closeModal()" aria-label="Close">✕</button>
+    <h2>🛒 আপনার কার্ট</h2>
+    <div id="pCartItems"></div>
+    <input id="pCustomItem" placeholder="Search or add custom item… (press Enter)" onkeydown="if(event.key==='Enter')addCustomItemPopup()">
+    <p class="muted">Can't find a product? Type it above and press Enter — we will try to get it from a local dokan.</p>
+    <div id="pCartSummary"></div>
+    <div id="pCheckoutBox"></div>
+  </div>`, { wide: true });
+  renderCartPopup();
+}
+function renderCartPopup() {
+  const items = $("#pCartItems"); if (!items) return; // cart popup is not open
+  const c = cart(); const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
+  // Preserve anything already typed in the popup checkout form, so a qty
+  // tap never wipes the customer's edits (same pattern as renderCart).
+  const cur = { name: $("#pCoName") ? $("#pCoName").value : "", phone: $("#pCoPhone") ? $("#pCoPhone").value : "", addr: $("#pCoAddr") ? $("#pCoAddr").value : "", area: $("#pCoArea") ? $("#pCoArea").value : "" };
+  items.innerHTML = c.length ? c.map(i => `<div class="pop-item">
+    ${i.img ? `<img src="${i.img}" onerror="this.style.display='none'">` : ""}
+    <div style="flex:1"><b>${esc(i.name)}</b><br><span class="muted">${fmt(i.price)} each</span></div>
+    <button class="qty-btn" onclick="changeQtyPopup('${i.id}',-1)" aria-label="Decrease">−</button> ${i.qty} <button class="qty-btn" onclick="changeQtyPopup('${i.id}',1)" aria-label="Increase">+</button>
+    <b>${fmt(i.price * i.qty)}</b></div>`).join("") : `<p>Your cart is empty.</p><button class="btn ghost" style="width:100%" onclick="closeModal()">← Continue shopping</button>`;
+  const cs = $("#pCartSummary"); if (cs) cs.innerHTML = c.length ? `<p>Subtotal: ${fmt(sub)}<br>Delivery Fee: ${fmt(DELIVERY_FEE)}<br><b>Total: ${fmt(sub + DELIVERY_FEE)}</b> (COD)</p>` : "";
+  const s = session();
+  const dName = cur.name || (s && s.name) || "";
+  const dPhone = cur.phone || (s && s.phone) || "";
+  const dAddr = cur.addr || (s && s.address) || "";
+  const dArea = cur.area || (s && s.area) || window.BAZARKORI_AREAS[0];
+  const cb = $("#pCheckoutBox"); if (cb) cb.innerHTML = c.length ? `<label>Delivery Area</label><select id="pCoArea">${window.BAZARKORI_AREAS.map(a => `<option ${a === dArea ? "selected" : ""}>${a}</option>`).join("")}</select>
+  <label>Full Address</label><input id="pCoAddr" placeholder="House, road, area" value="${esc(dAddr)}"><label>Your Name</label><input id="pCoName" placeholder="Name" value="${esc(dName)}"><label>Phone</label><input id="pCoPhone" placeholder="01XXXXXXXXX" value="${esc(dPhone)}">
+  <button class="btn" style="width:100%;margin-top:8px" onclick="placeOrderPopup()">Place Order — Cash on Delivery</button>` : "";
+}
+function changeQtyPopup(id, d) { changeQty(id, d); renderCartPopup(); }
+function addCustomItemPopup() {
+  const inp = $("#pCustomItem"); if (!inp) return; const v = inp.value.trim(); if (!v) return;
+  const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, qty: 1, img: "" }); setCart(c);
+  inp.value = ""; renderCart(); renderCartPopup(); toast("Custom item added — we will confirm its price.");
+}
+function placeOrderPopup() {
+  const s = requireLogin("customer"); if (!s) return;
+  const c = cart(); if (!c.length) return toast("Cart is empty.");
+  const name = ($("#pCoName") && $("#pCoName").value.trim()) || s.name;
+  const phone = ($("#pCoPhone") && $("#pCoPhone").value.trim()) || s.phone;
+  const addr = $("#pCoAddr") ? $("#pCoAddr").value.trim() : "";
+  const area = $("#pCoArea") ? $("#pCoArea").value : window.BAZARKORI_AREAS[0];
+  if (!addr || !phone) return toast("Enter address and phone.");
+  const o = createOrder(name, phone, addr, area); if (!o) return;
+  renderCart(); closeModal();
   location.href = "orders.html?track=" + o.code; // orders page auto-opens the live countdown popup
 }
 
@@ -735,10 +952,14 @@ function syncAreasToSupabase(u) {
 const STEPS = [["placed", "অর্ডার দেওয়া হয়েছে"], ["accepted", "অর্ডার নেওয়া হয়েছে"], ["picked_up", "পণ্য কেনা হয়েছে"], ["on_the_way", "রাস্তায় আছে"], ["delivered", "ডেলিভারি হয়েছে"]];
 function renderMyOrders() {
   const s = session();
-  const list = s ? orders().filter(o => o.phone === s.phone || o.customer === s.name) : orders().slice(0, 5);
+  // v19: a visitor who is not logged in sees NO orders at all (the old code
+  // showed the 5 most recent orders to everyone, which is where the "random
+  // orders in Live Tracking" came from). A logged-in customer sees only
+  // their own orders.
+  const list = s ? orders().filter(o => o.phone === s.phone || o.customer === s.name) : [];
   const profileBar = (s && s.role === "customer") ? `<div class="panel"><b>আমার প্রোফাইল</b><p class="muted">নাম: ${esc(s.name || "—")} • ফোন: ${esc(s.phone || "—")} • ঠিকানা: ${esc(s.address || "— (এখনো দেওয়া হয়নি)")}</p><button class="btn small gold" onclick="openProfileModal()">✏️ Edit Profile / প্রোফাইল বদলান</button></div>` : "";
   const mo = $("#myOrders"); if (!mo) return;
-  mo.innerHTML = profileBar + (s ? "" : "<p class='muted'>Login to see only your orders. Showing recent orders (demo).</p>") + (list.length ? list.map(o => {
+  mo.innerHTML = profileBar + (s ? "" : "<p class='muted'>অর্ডার দেখতে লগইন করুন।</p>") + (list.length ? list.map(o => {
     const idx = STEPS.findIndex(x => x[0] === o.status);
     const log = o.statusLog || {};
     return `<div class="panel"><b>${o.code}</b> • ${fmt(o.total)} • ${esc(o.area)} • <span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>
@@ -747,7 +968,7 @@ function renderMyOrders() {
     <div class="timeline">${STEPS.map((st, i) => `<div class="step ${i < idx ? "done" : i === idx ? "now" : ""}">${i < idx ? "✓ " : ""}${st[1]}${log[st[0]] ? `<br><span class="muted">${fmtTime(log[st[0]])}</span>` : ""}</div>`).join("")}</div>
     ${o.rider ? `<p>🚴 রাইডার: <b>${esc(o.rider)}</b>${o.status === "delivered" ? " • ডেলিভারি সম্পন্ন হয়েছে। ধন্যবাদ!" : o.status === "on_the_way" ? " • আপনার পার্সেল নিয়ে রাস্তায় আছে, শীঘ্রই পৌঁছে যাবে।" : o.status === "picked_up" ? " • পণ্য কিনে ফেলেছে, এখন রওনা হবে।" : " • আপনার অর্ডার নিয়েছে।"}</p>` : "<p class='muted'>রাইডারের জন্য অপেক্ষা করছি…</p>"}
     <p class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</p></div>`;
-  }).join("") : "<p>No orders yet.</p>");
+  }).join("") : "<p>এখনো কোনো অর্ডার নেই — প্রথম অর্ডার করলেই এখানে দেখাবে।</p>");
 }
 
 // ---------- Rider ----------
@@ -807,7 +1028,7 @@ function renderRider() {
     }).join("")}</div>
     ${next ? `<button class="status-btn" onclick="setStatus('${o.code}','${next}')">${NEXT_BTN[next]}</button>` : ""}
     <p class="muted">এক ধাপ করে আপডেট করুন — কাস্টমার তার ফোনে সাথে সাথে দেখতে পাবে।</p></div>`;
-  }).join("") : "<p>None.</p>"}
+  }).join("") : "<p>এখনো কোনো ডেলিভারি নেই।</p>"}
   <h3>✅ আজ ডেলিভারি হয়েছে</h3>
   ${doneToday.length ? doneToday.map(o => `<div class="panel"><b>${o.code}</b> — ${fmt(o.total)} • ${esc(o.customer)} (${esc(o.phone)})<br><span class="muted">${timerDisplay(o).sub}</span><br>${waThanksBtn(o)}</div>`).join("") : "<p>আজ এখনো কোনো ডেলিভারি হয়নি।</p>"}`;
 }
@@ -926,7 +1147,7 @@ function renderAdmin() {
   </div>
   <h3>Live Orders ${all.filter(o => o.status === "placed").length ? `<span class="badge">${all.filter(o => o.status === "placed").length} new</span>` : ""}</h3>
   <table><tr><th>Order</th><th>Customer</th><th>Area</th><th>Total</th><th>Status</th><th>সময় / দেরি</th><th>Updated</th><th>Rider</th><th>ধন্যবাদ</th></tr>
-  ${all.slice(0, 30).map(o => {
+  ${all.length ? all.slice(0, 30).map(o => {
     const log = o.statusLog || {}; const lastTs = log[o.status] || o.created;
     const td = timerDisplay(o);
     let timing = "";
@@ -934,7 +1155,7 @@ function renderAdmin() {
     else if (o.status === "placed") timing = !ridersCovering(o.area).length ? `<span class="pill bad">⚠️ এই এলাকায় রাইডার নেই</span>` : `<span class="muted">রাইডার অপেক্ষায়</span>`;
     else timing = `<span class="js-countdown" data-code="${o.code}">${td.big}</span><br><span class="muted">${td.sub}</span>`;
     return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span></td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
-  }).join("")}</table>
+  }).join("") : `<tr><td colspan="9">এখনো কোনো অর্ডার আসেনি — কাস্টমার অর্ডার করলেই এখানে দেখাবে।</td></tr>`}</table>
   <h3>Rider Verification</h3>
   ${verifs.length ? verifs.map((v, i) => `<div class="panel"><b>${esc(v.nidName)}</b> (${esc(v.rider)}) • NID ${esc(v.nid)} • ${esc(v.phone)} • <span class="pill ${v.status === "verified" ? "ok" : v.status === "rejected" ? "bad" : "warn"}">${v.status}</span><br>
   ${v.photo ? `<img src="${v.photo}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">` : ""} ${v.front ? `<img src="${v.front}" style="width:120px;height:80px;object-fit:cover;border-radius:8px">` : ""} ${v.back ? `<img src="${v.back}" style="width:120px;height:80px;object-fit:cover;border-radius:8px">` : ""}
@@ -1029,7 +1250,7 @@ function renderProductDetail() {
       <p class="muted">In stock • Delivered in ~25 mins in ${window.BAZARKORI_AREAS.join(", ")} • Delivery fee ৳30 • Cash on Delivery${is18(p) ? " • Discreet Stealth Pack." : ""}</p>
       <div class="qty-row"><button class="qty-btn" onclick="detailQtyChange(-1)">−</button><span id="detailQty">1</span><button class="qty-btn" onclick="detailQtyChange(1)">+</button>
       <button class="btn gold" onclick="addDetailToCart(${p.id})">Add to Cart — ${fmt(p.price)}</button></div>
-      <p><a class="btn ghost" href="cart.html">🛒 Go to Cart</a></p>
+      <p><button class="btn ghost" onclick="openCartPopup()">🛒 Go to Cart</button></p>
     </div>
   </div>
   <div class="section-head"><h2>একই ক্যাটাগরির আরও পণ্য</h2><a href="categories.html?cat=${encodeURIComponent(p.category)}">View All →</a></div>
@@ -1047,6 +1268,7 @@ function addDetailToCart(id) { for (let i = 0; i < detailQty; i++) addToCart(id)
 // only after logging in with the owner credentials in the unified login.
 // v15: views are real pages now. Old showView() callers just navigate.
 function showView(v) {
+  if (v === "cart") { openCartPopup(); return; } // v20: cart opens as a popup, never a page
   const map = { store: "index.html", orders: "orders.html", admin: "admin.html", cart: "cart.html", login: "login.html" };
   if (v === "admin") { const s = session(); if (!s || s.role !== "admin") { openAuth(); toast("Admin panel দেখতে লগইন করুন।"); return; } }
   const target = map[v] || "index.html";
@@ -1109,6 +1331,7 @@ let _lastSyncSig = ""; // quiet-sync baseline, set in initApp (v17)
 function initApp() {
   try { seed(); } catch (e) { console.warn("seed failed", e); }
   try { mountShell(); } catch (e) { console.warn("mountShell failed", e); }
+  try { bindModalDismiss(); } catch (e) { console.warn("bindModalDismiss failed", e); } // v20: overlay tap + ESC close
   try { initSupabase(); } catch (e) { console.warn("initSupabase failed", e); }
   try { initPageParams(); } catch (e) { console.warn("initPageParams failed", e); }
   try { renderAll(); } catch (e) { console.warn("renderAll failed", e); }
