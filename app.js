@@ -2,6 +2,58 @@
 // Modes: Supabase (when supabase-config.js is filled) OR Local Demo (localStorage).
 // Supabase tables: profiles, products, orders, rider_payouts, settlements, rider_verifications (see supabase-schema.sql)
 const BKASH = "01865-861015", DELIVERY_FEE = 30, OWNER_PHONE = "01865861015";
+// ---------- Weight-based delivery fee (v23) ----------
+// Flat ৳30 up to 5 kg total order weight. Above 5 kg: +৳5 per extra kg
+// (per started kg). Weight comes from the unit at the end of the product
+// name: "1 kg" → 1, "500 gm" → 0.5, "2 L" ≈ 2 kg, "250 ml" ≈ 0.25 kg.
+// pcs/pack items have no weight → 0 kg. The rider keeps the FULL fee,
+// including the weight extra; the daily 10% due is 10% of the actual fee.
+const FREE_WEIGHT_KG = 5, EXTRA_FEE_PER_KG = 5;
+function itemKg(name) {
+  const m = String(name || "").match(/(\d+(?:\.\d+)?)\s*(kg|gm|g|ml|l)\s*$/i);
+  if (!m) return 0;
+  const v = parseFloat(m[1]), u = m[2].toLowerCase();
+  if (u === "kg") return v;
+  if (u === "gm" || u === "g") return v / 1000;
+  if (u === "l") return v; // 1 L ≈ 1 kg
+  return v / 1000; // ml ≈ grams
+}
+function cartWeightKg(items) { return (items || cart()).reduce((a, i) => a + itemKg(i.name) * (i.qty || 1), 0); }
+function deliveryFeeFor(items) {
+  const list = items || cart();
+  if (!list.length) return 0;
+  const extra = Math.max(0, Math.ceil(cartWeightKg(list) - FREE_WEIGHT_KG));
+  return DELIVERY_FEE + extra * EXTRA_FEE_PER_KG;
+}
+function feeBreakdown(items) {
+  const list = items || cart();
+  const fee = deliveryFeeFor(list);
+  const extra = Math.max(0, fee - DELIVERY_FEE) / EXTRA_FEE_PER_KG;
+  return { fee, extraKg: extra, weightKg: cartWeightKg(list) };
+}
+function fmtKg(kg) { return (Math.round(kg * 100) / 100).toLocaleString("bn-BD") + " কেজি"; }
+function orderFee(o) { return (o && o.fee) || DELIVERY_FEE; } // old orders predate the fee field
+function ordersFeeSum(list) { return list.reduce((a, o) => a + orderFee(o), 0); }
+// ---------- Service charge (v24) ----------
+// Selling price = MRP + ৳5 per product unit. products.js keeps the real MRP;
+// the +৳5 is applied at display and at add-to-cart, so the MRP stays the
+// source of truth. The rider buys at MRP and collects MRP+5 from the
+// customer — the ৳5 per unit is Tamim's service margin, owed daily along
+// with 10% of the delivery charge (see riderDue).
+const SERVICE_FEE_PER_ITEM = 5;
+function sellPrice(p) { return p.price + SERVICE_FEE_PER_ITEM; }
+function itemMrp(i) { return (i.mrp != null ? i.mrp : i.price); } // pre-v24 carts stored the MRP as price (no mrp field)
+function cartSellSub(items) { const l = items || cart(); return cartMrpSub(l) + serviceFeeFor(l); }
+function cartMrpSub(items) { return (items || cart()).reduce((a, i) => a + itemMrp(i) * (i.qty || 1), 0); }
+function serviceFeeFor(items) { return (items || cart()).reduce((a, i) => a + (i.qty || 1), 0) * SERVICE_FEE_PER_ITEM; }
+// What a rider owes Tamim for a set of delivered orders: ৳5 per product
+// unit sold + 10% of the delivery charges. Old orders without serviceFee
+// fall back to ৳5 × items qty.
+function riderDue(list) {
+  const service = list.reduce((a, o) => a + (o.serviceFee != null ? o.serviceFee : 5 * (o.items || []).reduce((x, i) => x + (i.qty || 1), 0)), 0);
+  const deliveryDue = Math.round(ordersFeeSum(list) * 0.10);
+  return { service, deliveryDue, total: service + deliveryDue };
+}
 const $ = s => document.querySelector(s);
 const ls = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -121,7 +173,7 @@ function footerHTML() {
       <p class="pay-badges"><span>COD</span><span>bKash</span></p>
     </div>
   </div>
-  <div class="footer-bottom">© 2026 বাজার করি — All Rights Reserved. • Riders buy with their own money and keep only the delivery charge. 10% of delivery earnings is due daily via bKash.</div>
+  <div class="footer-bottom">© 2026 বাজার করি — All Rights Reserved. • Riders buy with their own money and keep the delivery charge. Daily due: ৳5 per product sold + 10% of delivery charges, via bKash.</div>
 </footer>`;
 }
 function mountShell() {
@@ -138,6 +190,9 @@ function mountShell() {
   // Fill the register area dropdown on login.html (if present).
   const ra = document.getElementById("rpArea");
   if (ra) ra.innerHTML = window.BAZARKORI_AREAS.map(a => `<option>${a}</option>`).join("");
+  // Fill the customer terms on login.html's register form (if present).
+  const rt = document.getElementById("rpTerms");
+  if (rt) rt.innerHTML = CUSTOMER_TERMS_HTML;
 }
 // Category tile / footer link → categories page, pre-filtered.
 function goCat(c) { location.href = "categories.html?cat=" + encodeURIComponent(c || "All"); }
@@ -277,6 +332,21 @@ function openAuth() {
   <p class="muted">অ্যাকাউন্ট নেই? <a href="#" onclick="openRegister();return false;">রেজিস্টার করুন</a></p>`;
   $("#modal").classList.add("open");
 }
+// ---------- Customer terms (v23) ----------
+// Shown at customer registration (modal AND login page). The customer must
+// tick "আমি রাজি" before the account can be created.
+const CUSTOMER_TERMS_HTML = `<div class="terms-box">
+  <b>কাস্টমার শর্তাবলি — অনুগ্রহ করে পড়ে নিন</b>
+  <ul>
+    <li>📍 ডেলিভারি এলাকা: Demra Thana + আশেপাশের এলাকা (Demra, Sarulia, Matuail, Konapara, Staff Quarter, Jatrabari, Shyampur, Kadamtali)।</li>
+    <li>🚚 ডেলিভারি চার্জ: ৫ কেজি পর্যন্ত ফ্ল্যাট ৳৩০। ৫ কেজির বেশি হলে প্রতি অতিরিক্ত কেজি ৳৫ করে বাড়বে।</li>
+    <li>⏱️ রাইডার কনফার্মের পর ২৫ মিনিটে ডেলিভারি।</li>
+    <li>💵 পেমেন্ট: Cash on Delivery — পণ্য হাতে পেয়ে তারপর টাকা দিন।</li>
+    <li>🏷️ সব পণ্য MRP দামে — কোনো ডিসকাউন্ট বা লুকানো চার্জ নেই।</li>
+    <li>🛎️ সার্ভিস চার্জ: প্রতি পণ্যে ৳৫ (MRP-র উপরে) — এই চার্জে আমরা অর্ডার, রাইডার আর ডেলিভারি সাজিয়ে দিই।</li>
+    <li>🕛 খোলা: রাত ১২টা পর্যন্ত।</li>
+  </ul>
+</div>`;
 // Registration is customer-only: name, phone, password, address.
 // No role choice, no admin registration. Riders register via the app.
 function openRegister() {
@@ -288,6 +358,8 @@ function openRegister() {
   <label>পাসওয়ার্ড</label><input id="rPass" type="password" placeholder="পাসওয়ার্ড">
   <label>ঠিকানা</label><input id="rAddr" placeholder="বাসা, রোড, এলাকা">
   <label>এলাকা</label><select id="rArea">${window.BAZARKORI_AREAS.map(a => `<option>${a}</option>`).join("")}</select>
+  ${CUSTOMER_TERMS_HTML}
+  <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="rAgree" style="width:auto;margin-top:4px"> <span>হ্যাঁ, আমি উপরের সব শর্তে রাজি</span></label>
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="doRegister()">রেজিস্টার করুন</button><button class="btn ghost" onclick="openAuth()">লগইন করুন</button></div>`;
   $("#modal").classList.add("open");
 }
@@ -323,8 +395,8 @@ function registerWith(name, phone, pass, addr, area) {
   if (PAGE === "login.html") { location.href = "index.html"; return; }
   toast("রেজিস্টার হয়েছে! বাজার করি-তে স্বাগতম।");
 }
-function doRegister() { const n = $("#rName"), p = $("#rPhone"), w = $("#rPass"), a = $("#rAddr"), ar = $("#rArea"); if (n && p && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : ""); }
-function registerFromPage() { const n = $("#rpName"), p = $("#rpPhone"), w = $("#rpPass"), a = $("#rpAddr"), ar = $("#rpArea"); if (n && p && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : ""); }
+function doRegister() { const n = $("#rName"), p = $("#rPhone"), w = $("#rPass"), a = $("#rAddr"), ar = $("#rArea"); if (!$("#rAgree") || !$("#rAgree").checked) return toast("অনুগ্রহ করে শর্তাবলিতে রাজি হয়ে টিক দিন।"); if (n && p && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : ""); }
+function registerFromPage() { const n = $("#rpName"), p = $("#rpPhone"), w = $("#rpPass"), a = $("#rpAddr"), ar = $("#rpArea"); if (!$("#rpAgree") || !$("#rpAgree").checked) return toast("অনুগ্রহ করে শর্তাবলিতে রাজি হয়ে টিক দিন।"); if (n && p && w && a) registerWith(n.value.trim(), p.value.trim(), w.value, a.value.trim(), ar ? ar.value : ""); }
 function insertProfileToSupabase(u) {
   // Upsert by phone (unique): creates the row, or refreshes it if it exists.
   if (!LIVE || !sb) return;
@@ -622,7 +694,7 @@ function renderProducts() {
     <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
     <div class="pad"><h3>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h3>
     <div class="unit">${esc(p.unit)} • ${esc(p.category)}</div>
-    <div class="row"><span class="price">${fmt(p.price)}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`).join("") || "<p>No products found.</p>";
+    <div class="row"><span class="price">${fmt(sellPrice(p))}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`).join("") || "<p>No products found.</p>";
 }
 // ---------- Popular products (v16): every price is the real MRP.
 // "আজকের জনপ্রিয় পণ্য" — the 6 most-bought products at their actual MRP.
@@ -636,7 +708,7 @@ function renderDeals() {
     return `<div class="card" onclick="openProduct(${p.id})">
       <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
       <div class="pad"><h3>${esc(p.name)}</h3><div class="unit">${esc(p.unit)}</div>
-      <div class="row"><span class="price">${fmt(p.price)}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`;
+      <div class="row"><span class="price">${fmt(sellPrice(p))}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`;
   }).join("");
 }
 function renderFeatured() {
@@ -661,10 +733,11 @@ function openProductPopup(id) {
     <div class="pop-img"><img src="${p.img}" alt="${esc(p.name)}" onerror="this.onerror=null;this.src='logo.png'"></div>
     <h2 class="pop-title">${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h2>
     <p class="pop-unit">Size: <b>${esc(p.unit)}</b> • Category: <b>${esc(p.category)}</b></p>
-    <p class="pop-price">${fmt(p.price)}</p>
-    <p class="muted">আসল MRP — কোনো ছাড় নেই • In stock • ২৫ মিনিটে ডেলিভারি • ফ্ল্যাট ৳৩০ • Cash on Delivery${is18(p) ? " • Discreet Stealth Pack." : ""}</p>
+    <p class="pop-price">${fmt(sellPrice(p))}</p>
+    <p class="muted" style="margin:0">MRP ${fmt(p.price)} + ৳৫ সার্ভিস চার্জ</p>
+    <p class="muted">MRP + ৳৫ সার্ভিস চার্জ • In stock • ২৫ মিনিটে ডেলিভারি • ফ্ল্যাট ৳৩০ • Cash on Delivery${is18(p) ? " • Discreet Stealth Pack." : ""}</p>
     <div class="qty-row"><button class="qty-btn" onclick="popQtyChange(-1)" aria-label="Decrease quantity">−</button><span id="popQty">1</span><button class="qty-btn" onclick="popQtyChange(1)" aria-label="Increase quantity">+</button>
-    <button class="btn gold" id="popAddBtn" onclick="addPopToCart()">Add to Cart — ${fmt(p.price)}</button></div>
+    <button class="btn gold" id="popAddBtn" onclick="addPopToCart()">Add to Cart — ${fmt(sellPrice(p))}</button></div>
     <button class="btn ghost" style="width:100%" onclick="openCartPopup()">🛒 View Cart</button>
     <p style="text-align:center"><a href="javascript:void(0)" onclick="closeModal()">← Continue shopping</a></p>
   </div>`);
@@ -673,12 +746,12 @@ function popQtyChange(d) {
   popQty = Math.max(1, popQty + d);
   const q = $("#popQty"); if (q) q.textContent = popQty;
   const p = window.BAZARKORI_PRODUCTS.find(x => x.id === popProductId);
-  const b = $("#popAddBtn"); if (b && p) b.textContent = "Add to Cart — " + fmt(p.price * popQty);
+  const b = $("#popAddBtn"); if (b && p) b.textContent = "Add to Cart — " + fmt(sellPrice(p) * popQty);
 }
 function addToCartQty(id, qty) {
   const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return;
   const c = cart(); const f = c.find(x => x.id === id);
-  if (f) f.qty += qty; else c.push({ id, name: p.name + " " + p.unit, price: p.price, qty, img: p.img });
+  if (f) f.qty += qty; else c.push({ id, name: p.name + " " + p.unit, price: sellPrice(p), mrp: p.price, qty, img: p.img });
   setCart(c); renderCart();
 }
 function addPopToCart() {
@@ -696,20 +769,21 @@ function addPopToCart() {
 // ---------- Cart & Checkout ----------
 const cart = () => ls("bazar_cart", []);
 const setCart = c => save("bazar_cart", c);
-function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); toast(p.name + " added."); }
-function addCustomItem() { const inp = $("#customItem"); if (!inp) return; const v = inp.value.trim(); if (!v) return; const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, qty: 1, img: "" }); setCart(c); inp.value = ""; renderCart(); toast("Custom item added — we will confirm its price."); }
+function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: sellPrice(p), mrp: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); toast(p.name + " added."); }
+function addCustomItem() { const inp = $("#customItem"); if (!inp) return; const v = inp.value.trim(); if (!v) return; const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, mrp: 0, qty: 1, img: "" }); setCart(c); inp.value = ""; renderCart(); toast("Custom item added — we will confirm its price."); }
 function changeQty(id, d) { const c = cart(); const f = c.find(x => String(x.id) === String(id)); if (!f) return; f.qty += d; if (f.qty <= 0) c.splice(c.indexOf(f), 1); setCart(c); renderCart(); }
 function toggleCart() { openCartPopup(); }
 function renderCart() {
-  const c = cart(); const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
+  const c = cart(); const sub = cartSellSub(c); // MRP + ৳5 service per unit (v24)
+  const fb = feeBreakdown(c);
   const cc = $("#cartCount"); if (cc) cc.textContent = c.reduce((a, i) => a + i.qty, 0);
-  const ct = $("#cartTotal"); if (ct) ct.textContent = sub + (c.length ? DELIVERY_FEE : 0);
+  const ct = $("#cartTotal"); if (ct) ct.textContent = sub + (c.length ? fb.fee : 0);
   const ci = $("#cartItems"); if (ci) ci.innerHTML = c.length ? c.map(i => `<div style="display:flex;gap:8px;align-items:center;border-bottom:1px solid #eee;padding:8px 0">
     ${i.img ? `<img src="${i.img}" style="width:48px;height:48px;object-fit:cover;border-radius:8px" onerror="this.style.display='none'">` : ""}
     <div style="flex:1"><b>${esc(i.name)}</b><br><span class="muted">${fmt(i.price)} each</span></div>
     <button onclick="changeQty('${i.id}',-1)">−</button> ${i.qty} <button onclick="changeQty('${i.id}',1)">+</button>
     <b>${fmt(i.price * i.qty)}</b></div>`).join("") : "<p>Your cart is empty.</p>";
-  const cs = $("#cartSummary"); if (cs) cs.innerHTML = c.length ? `<p>Subtotal: ${fmt(sub)}<br>Delivery Fee: ${fmt(DELIVERY_FEE)}<br><b>Total: ${fmt(sub + DELIVERY_FEE)}</b> (COD)</p>` : "";
+  const cs = $("#cartSummary"); if (cs) cs.innerHTML = c.length ? `<p>পণ্যের দাম (MRP): ${fmt(cartMrpSub(c))}<br>সার্ভিস চার্জ (৳৫ × ${bn(c.reduce((a, i) => a + (i.qty || 1), 0))} পণ্য): ${fmt(serviceFeeFor(c))}<br>⚖️ মোট ওজন: ${fmtKg(fb.weightKg)}<br>Delivery Fee: ${fmt(fb.fee)}${fb.extraKg ? ` (৳৩০ + ৳৫ × ${bn(fb.extraKg)} অতিরিক্ত কেজি)` : " (৫ কেজি পর্যন্ত ফ্ল্যাট)"}<br><b>Total: ${fmt(sub + fb.fee)}</b> (COD)</p>` : "";
   // Checkout auto-fill: saved profile by default; anything already typed in the
   // form wins, so the 8s refresh never wipes the customer's edits.
   const s = session();
@@ -730,16 +804,18 @@ function createOrder(name, phone, addr, area) {
   const c = cart(); if (!c.length) return null;
   // Remember what the customer used at checkout, so next time it auto-fills.
   if (s && s.role === "customer") saveProfileData(s.phone, { name, phone, address: addr, area });
-  const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
+  const sub = cartSellSub(c); // MRP + ৳5 service per unit (v24)
+  const svc = serviceFeeFor(c);
+  const fb = feeBreakdown(c); // weight-based delivery fee (v23)
   // v19: unique order code from the highest existing one. Length-based
   // codes could collide after the v19 demo-order cleanup shrank the list
   // (e.g. 6 real orders left → next code would repeat an existing one).
   const nextNum = Math.max(1000, ...orders().map(o => { const m = /^LN-(\d+)$/.exec(o.code || ""); return m ? Number(m[1]) : 0; })) + 1;
-  const o = { code: "LN-" + nextNum, customer: name, phone, area, address: addr, items: c, subtotal: sub, fee: DELIVERY_FEE, total: sub + DELIVERY_FEE, status: "placed", statusLog: { placed: new Date().toISOString() }, rider: "", created: new Date().toISOString(), date: todayStr() };
+  const o = { code: "LN-" + nextNum, customer: name, phone, area, address: addr, items: c, subtotal: sub, mrpSubtotal: sub - svc, serviceFee: svc, fee: fb.fee, weightKg: Math.round(fb.weightKg * 100) / 100, total: sub + fb.fee, status: "placed", statusLog: { placed: new Date().toISOString() }, rider: "", created: new Date().toISOString(), date: todayStr() };
   const all = orders(); all.unshift(o); setOrders(all); setCart([]);
   notify("Order " + o.code + " placed! Broadcasting to online riders…");
   emailOrderNotify(o); // fire-and-forget; admin badge/sound above still fires regardless
-  if (LIVE && sb) sb.from("orders").insert([{ order_code: o.code, customer_name: name, customer_phone: phone, delivery_address: addr, area, items: c, subtotal_bdt: sub, delivery_fee_bdt: DELIVERY_FEE, total_bdt: o.total, status: "placed" }]).then(() => {});
+  if (LIVE && sb) sb.from("orders").insert([{ order_code: o.code, customer_name: name, customer_phone: phone, delivery_address: addr, area, items: c, subtotal_bdt: sub, delivery_fee_bdt: fb.fee, total_bdt: o.total, status: "placed" }]).then(() => {});
   return o;
 }
 function placeOrder() {
@@ -749,7 +825,7 @@ function placeOrder() {
   if (!addr || !phone) return toast("Enter address and phone.");
   const o = createOrder(name, phone, addr, area); if (!o) return;
   renderCart(); renderAll();
-  location.href = "orders.html?track=" + o.code; // orders page auto-opens the live countdown popup
+  openTrackPopup(o.code, { justPlaced: true }); // animated tracking popup, right here — no navigation yet
 }
 
 // ---------- Cart / checkout POPUP (v20) ----------
@@ -771,7 +847,7 @@ function openCartPopup() {
 }
 function renderCartPopup() {
   const items = $("#pCartItems"); if (!items) return; // cart popup is not open
-  const c = cart(); const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
+  const c = cart(); const sub = cartSellSub(c); // MRP + ৳5 service per unit (v24)
   // Preserve anything already typed in the popup checkout form, so a qty
   // tap never wipes the customer's edits (same pattern as renderCart).
   const cur = { name: $("#pCoName") ? $("#pCoName").value : "", phone: $("#pCoPhone") ? $("#pCoPhone").value : "", addr: $("#pCoAddr") ? $("#pCoAddr").value : "", area: $("#pCoArea") ? $("#pCoArea").value : "" };
@@ -780,7 +856,7 @@ function renderCartPopup() {
     <div style="flex:1"><b>${esc(i.name)}</b><br><span class="muted">${fmt(i.price)} each</span></div>
     <button class="qty-btn" onclick="changeQtyPopup('${i.id}',-1)" aria-label="Decrease">−</button> ${i.qty} <button class="qty-btn" onclick="changeQtyPopup('${i.id}',1)" aria-label="Increase">+</button>
     <b>${fmt(i.price * i.qty)}</b></div>`).join("") : `<p>Your cart is empty.</p><button class="btn ghost" style="width:100%" onclick="closeModal()">← Continue shopping</button>`;
-  const cs = $("#pCartSummary"); if (cs) cs.innerHTML = c.length ? `<p>Subtotal: ${fmt(sub)}<br>Delivery Fee: ${fmt(DELIVERY_FEE)}<br><b>Total: ${fmt(sub + DELIVERY_FEE)}</b> (COD)</p>` : "";
+  const cs = $("#pCartSummary"); if (cs) cs.innerHTML = c.length ? `<p>পণ্যের দাম (MRP): ${fmt(cartMrpSub(c))}<br>সার্ভিস চার্জ (৳৫ × ${bn(c.reduce((a, i) => a + (i.qty || 1), 0))} পণ্য): ${fmt(serviceFeeFor(c))}<br>⚖️ মোট ওজন: ${fmtKg(feeBreakdown(c).weightKg)}<br>Delivery Fee: ${fmt(feeBreakdown(c).fee)}${feeBreakdown(c).extraKg ? ` (৳৩০ + ৳৫ × ${bn(feeBreakdown(c).extraKg)} অতিরিক্ত কেজি)` : " (৫ কেজি পর্যন্ত ফ্ল্যাট)"}<br><b>Total: ${fmt(sub + feeBreakdown(c).fee)}</b> (COD)</p>` : "";
   const s = session();
   const dName = cur.name || (s && s.name) || "";
   const dPhone = cur.phone || (s && s.phone) || "";
@@ -793,7 +869,7 @@ function renderCartPopup() {
 function changeQtyPopup(id, d) { changeQty(id, d); renderCartPopup(); }
 function addCustomItemPopup() {
   const inp = $("#pCustomItem"); if (!inp) return; const v = inp.value.trim(); if (!v) return;
-  const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, qty: 1, img: "" }); setCart(c);
+  const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, mrp: 0, qty: 1, img: "" }); setCart(c);
   inp.value = ""; renderCart(); renderCartPopup(); toast("Custom item added — we will confirm its price.");
 }
 function placeOrderPopup() {
@@ -806,7 +882,7 @@ function placeOrderPopup() {
   if (!addr || !phone) return toast("Enter address and phone.");
   const o = createOrder(name, phone, addr, area); if (!o) return;
   renderCart(); closeModal();
-  location.href = "orders.html?track=" + o.code; // orders page auto-opens the live countdown popup
+  openTrackPopup(o.code, { justPlaced: true }); // animated tracking popup, right here — no navigation yet
 }
 
 // ---------- Order status flow (v7) ----------
@@ -871,33 +947,46 @@ function timerDisplay(o, nowMs) {
 function ridersCovering(area) {
   return users().filter(u => u.role === "rider" && !u.banned && u.verified && Array.isArray(u.areas) && u.areas.includes(area));
 }
-// ---------- Live tracking popup (v9) ----------
+// ---------- Live tracking popup (v9, animated tracker v22) ----------
 let trackCode = null;
-function openTrackPopup(code) {
+let trackJustPlaced = false;
+function openTrackPopup(code, opts) {
   trackCode = code;
+  trackJustPlaced = !!(opts && opts.justPlaced);
   renderTrackPopup();
   $("#modal").classList.add("open");
 }
-function closeTrackPopup() { trackCode = null; closeModal(); }
+function closeTrackPopup() { trackCode = null; trackJustPlaced = false; closeModal(); }
+// Animated delivery tracker (v22): a road with a scooter that rides along
+// as the order moves through the stages, plus pulsing stage dots. Shared by
+// the just-placed popup and the live-tracking popup — one component.
+function trackerHTML(o) {
+  const idx = STEPS.findIndex(x => x[0] === o.status);
+  const pct = Math.max(0, Math.min(100, idx / (STEPS.length - 1) * 100));
+  const log = o.statusLog || {};
+  return `<div class="tracker">
+    <div class="track-road"><div class="track-fill" style="width:${pct}%"></div><div class="track-scooter" style="left:calc(${pct}% - 18px)">🛵</div></div>
+    <div class="track-stages">${STEPS.map((st, i) => `<div class="tstage ${i < idx ? "done" : i === idx ? "now" : ""}"><span class="tdot">${i < idx ? "✓" : i === idx ? "●" : "○"}</span><span class="tlabel">${st[1]}</span>${log[st[0]] ? `<span class="ttime muted">${fmtTime(log[st[0]])}</span>` : ""}</div>`).join("")}</div>
+  </div>`;
+}
 function renderTrackPopup() {
   if (!trackCode) return;
   const o = orders().find(x => x.code === trackCode);
   if (!o) { $("#modalBody").innerHTML = "<p>অর্ডারটি পাওয়া যায়নি।</p>"; return; }
   $("#modal").setAttribute("data-track-status", o.status);
   const t = timerDisplay(o);
-  const idx = STEPS.findIndex(x => x[0] === o.status);
-  const log = o.statusLog || {};
   const unmatched = o.status === "placed" && !ridersCovering(o.area).length;
   $("#modalBody").innerHTML = `<div class="track-pop">
-  <h2 style="margin-top:0">📍 লাইভ ট্র্যাক — ${o.code}</h2>
+  ${trackJustPlaced ? `<div class="placed-check">✓</div><h2 style="margin:4px 0 0">অর্ডার কনফার্ম হয়েছে! 🎉</h2><p class="muted" style="margin:4px 0 0">অর্ডার নম্বর: <b>${o.code}</b> — রাইডার খুঁজছি…</p>` : `<h2 style="margin-top:0">📍 লাইভ ট্র্যাক — ${o.code}</h2>`}
   <p class="muted">${fmt(o.total)} • ${esc(o.area)} • ${esc(o.address || "")}</p>
+  <p class="muted">⚖️ মোট ওজন: ${fmtKg(o.weightKg != null ? o.weightKg : cartWeightKg(o.items))} • ডেলিভারি চার্জ ${fmt(orderFee(o))}</p>
+  ${trackerHTML(o)}
   <div class="track-timer ${t.cls}">${t.big}</div>
   <p class="track-sub">${t.sub}</p>
   ${unmatched ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো রাইডার নেই</p>` : ""}
   ${o.rider ? `<p>🚴 রাইডার: <b>${esc(o.rider)}</b></p>` : `<p class="muted">রাইডার এখনো অর্ডারটি নেয়নি — কনফার্ম হলেই টাইমার শুরু হবে।</p>`}
-  <div class="timeline">${STEPS.map((st, i) => `<div class="step ${i < idx ? "done" : i === idx ? "now" : ""}">${i < idx ? "✓ " : ""}${st[1]}${log[st[0]] ? `<br><span class="muted">${fmtTime(log[st[0]])}</span>` : ""}</div>`).join("")}</div>
   <p class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</p>
-  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="closeTrackPopup()">ঠিক আছে — Close</button><button class="btn ghost" onclick="closeTrackPopup();showView('orders')">My Orders দেখুন</button></div></div>`;
+  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn gold" onclick="closeTrackPopup()">ঠিক আছে — Close</button><button class="btn ghost" onclick="location.href='orders.html?track=${o.code}'">📍 My Orders-এ ট্র্যাক দেখুন</button></div></div>`;
 }
 function updateCountdowns() {
   // 1-second tick for the small countdowns inside rider/admin panels.
@@ -989,7 +1078,7 @@ function renderRider() {
   const pool = orders().filter(o => o.status === "placed" && (me.areas || []).includes(o.area));
   const mine = orders().filter(o => o.rider === me.name && o.status !== "delivered");
   const doneToday = orders().filter(o => o.rider === me.name && o.status === "delivered" && o.date === todayStr());
-  const earnings = doneToday.length * DELIVERY_FEE, due = Math.round(earnings * 0.10);
+  const earnings = ordersFeeSum(doneToday), rd = riderDue(doneToday), due = rd.total; // v24: ৳5/unit service + 10% of delivery fees
   const pay = ls("bazar_payouts", []).find(p => p.rider === me.name && p.date === todayStr()) || { sent: 0, trxid: "" };
   const ver = ls("bazar_verifications", []).find(v => v.phone === me.phone);
   el.innerHTML = `
@@ -1010,7 +1099,7 @@ function renderRider() {
   <div class="area-checks">${window.BAZARKORI_AREAS.map(a => `<label class="area-check"><input type="checkbox" class="areaCb" value="${esc(a)}" ${me.areas && me.areas.includes(a) ? "checked" : ""}> ${esc(a)}</label>`).join("")}</div>
   <button class="btn" onclick="saveRiderAreas()">এলাকা সংরক্ষণ করুন</button>
   <h3>Today — ${todayStr()}</h3>
-  <div class="statgrid"><div class="stat"><b>${doneToday.length}</b>Orders delivered</div><div class="stat"><b>${fmt(earnings)}</b>Delivery earnings (৳30 × ${doneToday.length})</div><div class="stat"><b>${fmt(due)}</b>10% due today</div><div class="stat"><b>${fmt(pay.sent || 0)}</b>Sent (TrxID: ${esc(pay.trxid || "—")})</div></div>
+  <div class="statgrid"><div class="stat"><b>${doneToday.length}</b>Orders delivered</div><div class="stat"><b>${fmt(earnings)}</b>Delivery earnings</div><div class="stat"><b>${fmt(rd.service)}</b>সার্ভিস চার্জ (৳৫ × পণ্য)</div><div class="stat"><b>${fmt(rd.deliveryDue)}</b>10% of delivery</div><div class="stat"><b>${fmt(due)}</b>মোট জমা দিতে হবে</div><div class="stat"><b>${fmt(pay.sent || 0)}</b>Sent (TrxID: ${esc(pay.trxid || "—")})</div></div>
   <p>Send <b>${fmt(due - (pay.sent || 0))}</b> today via bKash to owner: <b>${BKASH}</b></p>
   <label>Amount sent (৳)</label><input id="payAmt" type="number" placeholder="e.g. 6"><label>bKash TrxID</label><input id="payTrx" placeholder="TrxID">
   <button class="btn" onclick="markPaid()">I Sent via bKash</button>
@@ -1076,8 +1165,8 @@ function markPaid() {
   if (!amt || !trx) return toast("Enter amount and bKash TrxID.");
   const ps = ls("bazar_payouts", []); const ex = ps.find(p => p.rider === s.name && p.date === todayStr());
   const done = orders().filter(o => o.rider === s.name && o.status === "delivered" && o.date === todayStr());
-  if (ex) { ex.sent = amt; ex.trxid = trx; ex.orders = done.length; ex.earnings = done.length * DELIVERY_FEE; ex.due = Math.round(ex.earnings * 0.10); }
-  else ps.push({ rider: s.name, date: todayStr(), orders: done.length, earnings: done.length * DELIVERY_FEE, due: Math.round(done.length * DELIVERY_FEE * 0.10), sent: amt, trxid: trx });
+  if (ex) { ex.sent = amt; ex.trxid = trx; ex.orders = done.length; ex.earnings = ordersFeeSum(done); ex.due = riderDue(done).total; }
+  else ps.push({ rider: s.name, date: todayStr(), orders: done.length, earnings: ordersFeeSum(done), due: riderDue(done).total, sent: amt, trxid: trx });
   save("bazar_payouts", ps); renderAll(); toast("Marked sent. Admin will approve it tonight.");
 }
 
@@ -1146,7 +1235,7 @@ function renderAdmin() {
     <div class="stat"><b>${todays.filter(o => o.status === "placed" || o.status === "accepted").length}</b>Pending</div>
     <div class="stat"><b>${fmt(sales)}</b>Product sales today</div>
     <div class="stat"><b>${fmt(fees)}</b>Delivery charges today</div>
-    <div class="stat"><b>${fmt(Math.round(fees * 0.10))}</b>10% commission due today</div>
+    <div class="stat"><b>${fmt(riderDue(todays.filter(o => o.status === "delivered")).service)}</b>সার্ভিস চার্জ আজ</div><div class="stat"><b>${fmt(riderDue(todays.filter(o => o.status === "delivered")).total)}</b>রাইডারদের মোট জমা (সার্ভিস + ১০%)</div>
     <div class="stat"><b>${all.length}</b>Total orders (all time)</div>
   </div>
   <h3>Live Orders ${all.filter(o => o.status === "placed").length ? `<span class="badge">${all.filter(o => o.status === "placed").length} new</span>` : ""}</h3>
@@ -1169,17 +1258,17 @@ function renderAdmin() {
   <button class="btn small" onclick="buildSettlement()">Generate Tonight's Checklist</button>
   ${riders.map(r => {
     const d = orders().filter(o => o.rider === r.name && o.status === "delivered" && o.date === t);
-    const earn = d.length * DELIVERY_FEE, due = Math.round(earn * 0.10);
+    const earn = ordersFeeSum(d); // due shown from riderDue(d) in the row below
     const pay = payouts.find(p => p.rider === r.name && p.date === t) || {};
     const st = settlements.find(x => x.rider === r.name && x.date === t);
-    return `<div class="panel"><b>${esc(r.name)}</b> • ${d.length} orders • Earnings ${fmt(earn)} • 10% due ${fmt(due)} • Sent ${fmt(pay.sent || 0)} ${pay.trxid ? "(TrxID " + esc(pay.trxid) + ")" : "(not sent)"} • Status: ${r.banned ? "<b style='color:red'>OFF</b>" : "Active"} • Settlement: ${st ? st.status : "pending"}
+    return `<div class="panel"><b>${esc(r.name)}</b> • ${d.length} orders • Earnings ${fmt(earn)} • সার্ভিস ${fmt(riderDue(d).service)} • মোট জমা ${fmt(riderDue(d).total)} • Sent ${fmt(pay.sent || 0)} ${pay.trxid ? "(TrxID " + esc(pay.trxid) + ")" : "(not sent)"} • Status: ${r.banned ? "<b style='color:red'>OFF</b>" : "Active"} • Settlement: ${st ? st.status : "pending"}
     <br><button class="btn small" onclick="settleRider('${esc(r.phone)}','approved')">Approve</button>
     <button class="btn small danger" onclick="settleRider('${esc(r.phone)}','not_approved')">Not Approved</button>
     <button class="btn small gold" onclick="reactivateRider('${esc(r.phone)}')">Re-activate / ON</button></div>`;
   }).join("")}
   <h3>Riders</h3>
   <table><tr><th>Name</th><th>Phone</th><th>এলাকা</th><th>Verified</th><th>Online</th><th>Status</th></tr>${riders.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.phone)}</td><td>${esc((r.areas || []).join(", ") || "—")}</td><td>${r.verified ? "Yes" : r.vstatus}</td><td>${r.online ? "Online" : "Offline"}</td><td>${r.banned ? "OFF" : "Active"}</td></tr>`).join("")}</table>
-  <h3>Settings</h3><p>Owner bKash (riders send 10% here): <b>${BKASH}</b> • Delivery fee: ${fmt(DELIVERY_FEE)} • Areas: ${window.BAZARKORI_AREAS.join(", ")}</p>
+  <h3>Settings</h3><p>Owner bKash (riders send 10% here): <b>${BKASH}</b> • Delivery fee: ${fmt(DELIVERY_FEE)} (৫ কেজি পর্যন্ত) + ৳৫ প্রতি অতিরিক্ত কেজি • Areas: ${window.BAZARKORI_AREAS.join(", ")}</p>
   <p class="muted">Admin account is one-time only. No one can register a second admin from this app.</p>`;
 }
 function reviewVerification(i, status) {
@@ -1194,7 +1283,7 @@ function buildSettlement() {
   users().filter(u => u.role === "rider").forEach(r => {
     if (ss.some(x => x.rider === r.name && x.date === t)) return;
     const d = orders().filter(o => o.rider === r.name && o.status === "delivered" && o.date === t);
-    ss.push({ rider: r.name, date: t, orders: d.length, earnings: d.length * DELIVERY_FEE, due: Math.round(d.length * DELIVERY_FEE * 0.10), status: "pending" });
+    ss.push({ rider: r.name, date: t, orders: d.length, earnings: ordersFeeSum(d), due: riderDue(d).total, status: "pending" });
   });
   save("bazar_settlements", ss); renderAll(); toast("Tonight's settlement checklist generated.");
 }
@@ -1203,7 +1292,7 @@ function settleRider(phone, status) {
   const r = users().find(u => u.phone === phone); if (!r) return;
   let row = ss.find(x => x.rider === r.name && x.date === t);
   const d = orders().filter(o => o.rider === r.name && o.status === "delivered" && o.date === t);
-  if (!row) { row = { rider: r.name, date: t, orders: d.length, earnings: d.length * DELIVERY_FEE, due: Math.round(d.length * DELIVERY_FEE * 0.10), status }; ss.push(row); }
+  if (!row) { row = { rider: r.name, date: t, orders: d.length, earnings: ordersFeeSum(d), due: riderDue(d).total, status }; ss.push(row); }
   else row.status = status;
   save("bazar_settlements", ss);
   const all = users(); const me = all.find(u => u.phone === phone);
@@ -1250,10 +1339,11 @@ function renderProductDetail() {
     <div class="detail-info">
       <h1>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h1>
       <p class="detail-unit">Size: <b>${esc(p.unit)}</b> • Category: <b>${esc(p.category)}</b></p>
-      <p class="detail-price">${fmt(p.price)}</p>
+      <p class="detail-price">${fmt(sellPrice(p))}</p>
+      <p class="muted">MRP ${fmt(p.price)} + ৳৫ সার্ভিস চার্জ</p>
       <p class="muted">In stock • Delivered in ~25 mins in ${window.BAZARKORI_AREAS.join(", ")} • Delivery fee ৳30 • Cash on Delivery${is18(p) ? " • Discreet Stealth Pack." : ""}</p>
       <div class="qty-row"><button class="qty-btn" onclick="detailQtyChange(-1)">−</button><span id="detailQty">1</span><button class="qty-btn" onclick="detailQtyChange(1)">+</button>
-      <button class="btn gold" onclick="addDetailToCart(${p.id})">Add to Cart — ${fmt(p.price)}</button></div>
+      <button class="btn gold" onclick="addDetailToCart(${p.id})">Add to Cart — ${fmt(sellPrice(p))}</button></div>
       <p><button class="btn ghost" onclick="openCartPopup()">🛒 Go to Cart</button></p>
     </div>
   </div>
@@ -1261,7 +1351,7 @@ function renderProductDetail() {
   <div class="grid">${similar.map(x => `<div class="card" onclick="openProduct(${x.id})">
     <img src="${x.img}" alt="${esc(x.name)}" loading="lazy" onerror="this.style.display='none'">
     <div class="pad"><h3>${esc(x.name)}</h3><div class="unit">${esc(x.unit)} • ${esc(x.category)}</div>
-    <div class="row"><span class="price">${fmt(x.price)}</span><button class="add" onclick="event.stopPropagation();addToCart(${x.id})">ADD</button></div></div></div>`).join("") || "<p>এই ক্যাটাগরিতে আর কোনো পণ্য নেই।</p>"}</div>`;
+    <div class="row"><span class="price">${fmt(sellPrice(x))}</span><button class="add" onclick="event.stopPropagation();addToCart(${x.id})">ADD</button></div></div></div>`).join("") || "<p>এই ক্যাটাগরিতে আর কোনো পণ্য নেই।</p>"}</div>`;
 }
 function detailQtyChange(d) { detailQty = Math.max(1, detailQty + d); const q = $("#detailQty"); if (q) q.textContent = detailQty; }
 function addDetailToCart(id) { for (let i = 0; i < detailQty; i++) addToCart(id); toast("কার্টে যোগ হয়েছে।"); }
@@ -1386,9 +1476,9 @@ function updateOrderBadge() {
   const b = $("#orderBadge"); if (b) { b.textContent = newCount; b.classList.toggle("hidden", !newCount); }
 }
 function updateHeaderCart() {
-  const c = cart(); const sub = c.reduce((a, i) => a + i.price * i.qty, 0);
+  const c = cart(); const sub = cartSellSub(c);
   const cc = $("#cartCount"); if (cc) cc.textContent = c.reduce((a, i) => a + i.qty, 0);
-  const ct = $("#cartTotal"); if (ct) ct.textContent = sub + (c.length ? DELIVERY_FEE : 0);
+  const ct = $("#cartTotal"); if (ct) ct.textContent = sub + (c.length ? deliveryFeeFor(c) : 0);
 }
 function quietSync(force) {
   const sig = ordersSig();

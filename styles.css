@@ -168,6 +168,27 @@ footer{padding:28px 20px;text-align:center;color:var(--muted);font-size:15px;lin
 .track-timer.overtime{color:#8a4b12;background:#fdf0e2}
 .track-timer.delivered{font-size:30px;color:var(--green-deep);background:#d9efe1}
 .track-sub{font-weight:700;margin:4px 0 10px}
+/* ---- Customer / rider terms box (v23) ---- */
+.terms-box{background:var(--green-soft);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:12px;text-align:left}
+.terms-box ul{margin:8px 0 0;padding-left:18px}
+.terms-box li{margin:5px 0;font-size:14px;line-height:1.5}
+.placed-check{width:64px;height:64px;margin:6px auto 0;border-radius:50%;background:var(--green);color:#fff;font-size:34px;font-weight:900;line-height:64px;animation:pop-in .45s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes pop-in{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+.tracker{margin:16px 0 6px}
+.track-road{position:relative;height:8px;border-radius:99px;background:#e8e2d2;margin:22px 6px 10px}
+.track-fill{position:absolute;left:0;top:0;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--green2),var(--green));transition:width 1s ease}
+.track-scooter{position:absolute;top:-26px;font-size:30px;line-height:1;transition:left 1s ease;animation:scooter-bob 1s ease-in-out infinite}
+@keyframes scooter-bob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-4px) rotate(2deg)}}
+.track-stages{display:flex;gap:6px}
+.tstage{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-weight:700;color:var(--muted)}
+.tstage .tdot{width:26px;height:26px;border-radius:50%;background:#f0ede2;border:2px solid #d8d2bd;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted)}
+.tstage.now{color:var(--green-deep)}
+.tstage.now .tdot{background:var(--green);border-color:var(--green);color:#fff;animation:dot-pulse 1.4s ease-in-out infinite}
+@keyframes dot-pulse{0%,100%{box-shadow:0 0 0 0 rgba(11,93,59,.35)}50%{box-shadow:0 0 0 8px rgba(11,93,59,0)}}
+.tstage.done{color:var(--green-deep)}
+.tstage.done .tdot{background:var(--green);border-color:var(--green);color:#fff}
+.tstage .ttime{font-size:11px;font-weight:400}
+@media(prefers-reduced-motion:reduce){.placed-check,.track-scooter,.tstage.now .tdot{animation:none}.track-fill,.track-scooter{transition:none}}
 .track-mini{font-size:15px;font-weight:700;background:var(--green-soft);border-radius:12px;padding:9px 12px;margin:8px 0}
 .track-mini .js-countdown{font-variant-numeric:tabular-nums;font-size:18px}
 .track-mini.overtime{background:#fdf0e2;color:#8a4b12}
