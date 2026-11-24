@@ -102,7 +102,12 @@ function isDemoUser(u) { return !!u && isDemoPhone(u.phone); }
 // ON the admin shows everything again, so a future test check can
 // still verify the admin panel.
 function adminShowDemo() { return !!ls("bazar_admin_show_demo", false); }
-function toggleAdminShowDemo() { save("bazar_admin_show_demo", !adminShowDemo()); renderAdmin(); }
+// v37: also refresh the header badge — renderAdmin() only rebuilds the
+// panel; the badge is updated by updateOrderBadge(), which the 8s quiet
+// sync would only call if the ORDER signature changed (it doesn't here,
+// only the toggle flipped). Without this the badge kept the old number
+// until the next navigation/reload.
+function toggleAdminShowDemo() { save("bazar_admin_show_demo", !adminShowDemo()); renderAdmin(); updateOrderBadge(); }
 function adminVisibleOrders(list) { return adminShowDemo() ? (list || []) : (list || []).filter(o => !isDemoOrder(o)); }
 function adminVisibleUsers(list) { return adminShowDemo() ? (list || []) : (list || []).filter(u => !isDemoUser(u)); }
 // v36: header My Orders badge — when the signed-in user is the admin/owner,
@@ -1166,9 +1171,15 @@ const CAT_BN = {
   "Party Store": "পার্টি", "Stationery": "স্টেশনারি",
   "Fruit & Vegetables": "ফল সবজি", "Meat & Fish": "মাছ মাংস"
 };
+// v37: digit+unit queries — "1L" = "1 L", "500ml" = "500 ml", "7up" = "7 up".
+// Applied to BOTH the query and the searchable text so the two sides agree:
+// units are stored with a space ("1 L"), so the one-token query "1L" never
+// matched the two haystack words "1" + "l". Latin letters only; Bangla and
+// the Roman-Bangla expansions are untouched.
+function splitDigitLetter(s) { return String(s || "").replace(/(\d)([a-zA-Z])/g, "$1 $2"); }
 // Split a product's searchable text into words (English + Bangla).
 function hayWords(p) {
-  const hay = (p.name + " " + p.unit + " " + p.category + " " + (CAT_BN[p.category] || "")).toLowerCase();
+  const hay = splitDigitLetter(p.name + " " + p.unit + " " + p.category + " " + (CAT_BN[p.category] || "")).toLowerCase();
   return { hay, words: hay.split(/[^a-z0-9\u0980-\u09ff]+/i).filter(Boolean) };
 }
 // Does an English term match on word boundaries? Single word: equals the
@@ -1191,7 +1202,7 @@ function termMatches(p, term) {
   return wordMatch(words, term);
 }
 function productMatches(p, q) {
-  q = (q || "").toLowerCase().trim();
+  q = splitDigitLetter(q || "").toLowerCase().trim(); // v37: "1L" → "1 L"
   if (!q) return true;
   const { hay } = hayWords(p);
   // Bangla query: direct substring first, then Bangla→English synonyms
@@ -1404,7 +1415,7 @@ function renderCart() {
   const dArea = cur.area || (s && s.area) || window.BAZARKORI_AREAS[0];
   const cb = $("#checkoutBox"); if (cb) cb.innerHTML = c.length ? `<label>Delivery Area</label><select id="coArea">${window.BAZARKORI_AREAS.map(a => `<option ${a === dArea ? "selected" : ""}>${a}</option>`).join("")}</select>
   <label>Full Address</label><input id="coAddr" placeholder="House, road, area" value="${esc(dAddr)}"><label>Your Name</label><input id="coName" placeholder="Name" value="${esc(dName)}"><label>Phone</label><input id="coPhone" placeholder="01XXXXXXXXX" value="${esc(dPhone)}">
-  <button class="btn" style="width:100%;margin-top:8px" onclick="placeOrder()">Place Order — Cash on Delivery</button>` : "";
+  <button class="btn" style="width:100%;margin-top:8px" onclick="placeOrder(this)">Place Order — Cash on Delivery</button>` : "";
 }
 // ---------- Order codes + order identity (v34) ----------
 // BUG (proven live 24 Nov ~17:21): createOrder() assigned the code from the
@@ -1461,6 +1472,11 @@ function isUniqueViolation(err) {
 // ---------- Shared order creation (v20) ----------
 // Used by the cart page AND the cart popup — one code path, one order code
 // sequence, so the two can never drift apart.
+// v37: one tap = one order. The server-max fetch awaits up to 3s with no
+// visible feedback, so a second tap used to start a second createOrder
+// (same code number, two orders). While a submit is in flight, further
+// taps are ignored and the button shows it is working.
+let _placingOrder = false;
 async function createOrder(name, phone, addr, area) {
   const s = session();
   const c = cart(); if (!c.length) return null;
@@ -1472,9 +1488,14 @@ async function createOrder(name, phone, addr, area) {
   // v34: code from max(LOCAL max, SERVER max) + 1 — a fresh browser must
   // never restart at LN-1001 (see the v34 note above). _lastIssuedCodeNum
   // keeps two rapid creates in this tab sequential too.
-  const serverMax = await fetchServerMaxCode();
+  // v37: reserve the next code number SYNCHRONOUSLY, before the awaited
+  // server-max fetch — two rapid submits suspended at the same await would
+  // otherwise read the same max and create two orders with one code.
   const localMax = Math.max(1000, ...orders().map(o => codeNum(o.code)));
-  const nextNum = Math.max(localMax, serverMax || 0, _lastIssuedCodeNum) + 1;
+  _lastIssuedCodeNum = Math.max(localMax, _lastIssuedCodeNum) + 1;
+  const reserved = _lastIssuedCodeNum;
+  const serverMax = await fetchServerMaxCode();
+  const nextNum = Math.max(reserved, (serverMax || 0) + 1);
   _lastIssuedCodeNum = nextNum;
   const o = { code: "LN-" + nextNum, customer: name, phone, area, address: addr, items: c, subtotal: sub, mrpSubtotal: sub - svc, serviceFee: svc, fee: fb.fee, weightKg: Math.round(fb.weightKg * 100) / 100, total: sub + fb.fee, status: "placed", statusLog: { placed: new Date().toISOString() }, rider: "", created: new Date().toISOString(), date: todayStr() };
   const all = orders(); all.unshift(o); setOrders(all); setCart([]);
@@ -1487,7 +1508,7 @@ async function createOrder(name, phone, addr, area) {
   if (finalCode && finalCode !== o.code) o.code = finalCode;
   return o;
 }
-async function placeOrder() {
+async function placeOrder(btn) {
   const s = requireLogin("customer"); if (!s) return;
   const c = cart(); if (!c.length) return toast("Cart is empty.");
   const name = $("#coName").value.trim() || s.name, phoneRaw = $("#coPhone").value.trim() || s.phone, addr = $("#coAddr").value.trim(), area = $("#coArea").value;
@@ -1498,7 +1519,13 @@ async function placeOrder() {
   if (!phone) return toast(PHONE_ERR);
   const av = validateAddress(addr);
   if (!av.ok) return toast(av.error);
-  const o = await createOrder(name, phone, addr, area); if (!o) return;
+  if (_placingOrder) return; // v37: second tap while the first is still placing
+  _placingOrder = true;
+  if (btn) { btn.disabled = true; btn.textContent = "অর্ডার হচ্ছে…"; }
+  let o = null;
+  try { o = await createOrder(name, phone, addr, area); }
+  finally { _placingOrder = false; }
+  if (!o) { if (btn) { btn.disabled = false; btn.textContent = "Place Order — Cash on Delivery"; } return; }
   renderCart(); renderAll();
   openTrackPopup(o.code, { justPlaced: true }); // animated tracking popup, right here — no navigation yet
 }
@@ -1539,7 +1566,7 @@ function renderCartPopup() {
   const dArea = cur.area || (s && s.area) || window.BAZARKORI_AREAS[0];
   const cb = $("#pCheckoutBox"); if (cb) cb.innerHTML = c.length ? `<label>Delivery Area</label><select id="pCoArea">${window.BAZARKORI_AREAS.map(a => `<option ${a === dArea ? "selected" : ""}>${a}</option>`).join("")}</select>
   <label>Full Address</label><input id="pCoAddr" placeholder="House, road, area" value="${esc(dAddr)}"><label>Your Name</label><input id="pCoName" placeholder="Name" value="${esc(dName)}"><label>Phone</label><input id="pCoPhone" placeholder="01XXXXXXXXX" value="${esc(dPhone)}">
-  <button class="btn" style="width:100%;margin-top:8px" onclick="placeOrderPopup()">Place Order — Cash on Delivery</button>` : "";
+  <button class="btn" style="width:100%;margin-top:8px" onclick="placeOrderPopup(this)">Place Order — Cash on Delivery</button>` : "";
 }
 function changeQtyPopup(id, d) { changeQty(id, d); renderCartPopup(); }
 function addCustomItemPopup() {
@@ -1547,7 +1574,7 @@ function addCustomItemPopup() {
   const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, mrp: 0, qty: 1, img: "" }); setCart(c);
   inp.value = ""; renderCart(); renderCartPopup(); toast("Custom item added — we will confirm its price.");
 }
-async function placeOrderPopup() {
+async function placeOrderPopup(btn) {
   const s = requireLogin("customer"); if (!s) return;
   const c = cart(); if (!c.length) return toast("Cart is empty.");
   const name = ($("#pCoName") && $("#pCoName").value.trim()) || s.name;
@@ -1561,7 +1588,13 @@ async function placeOrderPopup() {
   if (!phone) return toast(PHONE_ERR);
   const av = validateAddress(addr);
   if (!av.ok) return toast(av.error);
-  const o = await createOrder(name, phone, addr, area); if (!o) return;
+  if (_placingOrder) return; // v37: second tap while the first is still placing
+  _placingOrder = true;
+  if (btn) { btn.disabled = true; btn.textContent = "অর্ডার হচ্ছে…"; }
+  let o = null;
+  try { o = await createOrder(name, phone, addr, area); }
+  finally { _placingOrder = false; }
+  if (!o) { if (btn) { btn.disabled = false; btn.textContent = "Place Order — Cash on Delivery"; } return; }
   renderCart(); closeModal();
   openTrackPopup(o.code, { justPlaced: true }); // animated tracking popup, right here — no navigation yet
 }
