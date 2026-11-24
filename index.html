@@ -6,87 +6,67 @@
 <title>বাজার করি — তাজা বাজার, ভালো জীবন | Demra Thana Delivery</title>
 <meta name="description" content="বাজার করি — Demra Thana + nearby Dhaka areas. তাজা বাজার, গ্রোসারি, পানীয়, কসমেটিকস, ইলেকট্রনিকস — ২৫ মিনিটে ডেলিভারি। ফ্ল্যাট ৳৩০ ডেলিভারি, Cash on Delivery।">
 <link rel="icon" href="logo.png">
-<link rel="stylesheet" href="styles.css?v=38">
+<link rel="stylesheet" href="styles.css?v=40">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=38"></script>
-<script src="products.js?v=38"></script>
+<script src="supabase-config.js?v=40"></script>
+<script src="products.js?v=40"></script>
 </head>
 <body>
 <div id="shellHeader"></div>
 <main>
-  <div class="hero hero-fm">
-    <div class="hero-left">
-      <div class="hero-eyebrow">🌿 তাজা পণ্যের নিশ্চয়তা</div>
-      <h1>তাজা বাজার,<br><span>ভালো জীবন</span></h1>
-      <p>ঘরে বসে তাজা ফল, সবজি আর নিত্যপ্রয়োজনীয় সবকিছু — স্বাস্থ্যকর আর সুখী জীবনের জন্য। ডেমরার নিজের দোকান থেকে, মাত্র ২৫ মিনিটে আপনার দরজায়।</p>
-      <div class="hero-cta">
-        <button class="btn hero-btn" onclick="location.href='categories.html'">এখনই কিনুন →</button>
-        <button class="btn ghost hero-btn" onclick="location.href='deals.html'">জনপ্রিয় পণ্য দেখুন</button>
-      </div>
-      <input class="hero-search" id="heroSearch" placeholder="কী লাগবে? খুঁজুন… যেমন: তেল, কোক, চিনি" onkeydown="if(event.key==='Enter'){location.href='categories.html?q='+encodeURIComponent(this.value)}">
-      <div class="trust-pills">
-        <span>🌿 তাজা পণ্য<br><b>সেরা মানের</b></span>
-        <span>🚚 ফ্ল্যাট ৳৩০<br><b>২৫ মিনিটে ডেলিভারি</b></span>
-        <span>🔒 নিরাপদ<br><b>Cash on Delivery</b></span>
-        <span>↩️ সহজ রিটার্ন<br><b>সমস্যা হলে জানান</b></span>
-      </div>
+  <div class="gm-hero">
+    <div class="gm-hero-text">
+      <h1 class="gm-hero-title" id="heroTitle">বাজার করি — দোকান এখন আপনার দরজায়</h1>
+      <p class="gm-hero-sub">তাজা বাজার, ভালো জীবন — MRP-র চেয়ে প্রতি পণ্যে মাত্র ৳৫ বেশি, ২৫ মিনিটে ডেলিভারি</p>
+      <button class="gm-hero-btn" onclick="location.href='categories.html'">এখনই বাজার করুন</button>
     </div>
-    <div class="hero-right">
-      <img class="hero-basket" src="https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=1200&q=80" alt="তাজা সবজি ও ফলের ঝুড়ি" loading="eager" onerror="this.style.display='none'">
-      <div class="hero-badge"><b>২৫<br>মিনিটে</b><span>ডেলিভারি</span></div>
+    <div class="gm-hero-img">
+      <img src="https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=1200&q=80" alt="তাজা সবজি ও ফলের ঝুড়ি">
     </div>
   </div>
 
-  <div class="section-head"><h2>🛒 ক্যাটাগরি দিয়ে কিনুন</h2><a href="categories.html">View All →</a></div>
+  <div class="section-head"><h2>ক্যাটাগরি দিয়ে কিনুন</h2><a href="categories.html">সব দেখুন →</a></div>
   <div class="cat-tiles" id="catTiles"></div>
 
-  <div class="promos">
-    <div class="promo promo-offer">
-      <img src="https://images.unsplash.com/photo-1518843875459-f738682238a6?w=1200&q=80" alt="তাজা সবজি" loading="lazy" onerror="this.style.display='none'">
-      <div class="promo-text">
-        <h3>সপ্তাহের<br><span>সেরা পণ্য</span></h3>
-        <p>সবচেয়ে বেশি কেনা পণ্যগুলো — আসল MRP দামে, প্রতিদিন।</p>
-        <button class="btn gold" onclick="location.href='deals.html'">এখনই কিনুন →</button>
-      </div>
-    </div>
-    <div class="promo promo-delivery">
-      <div class="promo-text">
-        <h3>২৫ মিনিটে<br><span>ডেলিভারি!</span></h3>
-        <p>তাজা আর দ্রুত ডেলিভারি, আপনার দরজায়।</p>
-        <button class="btn" onclick="location.href='categories.html'">অর্ডার করুন →</button>
-      </div>
-      <img src="https://images.unsplash.com/photo-1526367790999-0150786686a2?w=1200&q=80" alt="ডেলিভারি রাইডার" loading="lazy" onerror="this.style.display='none'">
-    </div>
-  </div>
-
   <div id="popularSection">
-    <div class="section-head"><h2>⭐ আজকের জনপ্রিয় পণ্য</h2><a href="deals.html">সব জনপ্রিয় পণ্য →</a></div>
+    <div class="section-head"><h2>আপনার যা লাগতে পারে</h2><a href="deals.html">আরও দেখুন →</a></div>
     <div class="grid deals-grid" id="deals"></div>
   </div>
 
-  <div class="howto">
-    <h2>কিভাবে অর্ডার করবেন?</h2>
-    <div class="howto-steps">
-      <div class="howto-step"><span class="howto-num">১</span><b>পণ্য বেছে নিন</b><span>খুঁজুন, ADD চাপুন, কার্টে নিন</span></div>
-      <div class="howto-step"><span class="howto-num">২</span><b>রাইডার কনফার্ম করবে</b><span>অর্ডার দিলেই রাইডার Accept করবে</span></div>
-      <div class="howto-step"><span class="howto-num">৩</span><b>২৫ মিনিটে ডেলিভারি</b><span>লাইভ ট্র্যাকে দেখুন, COD তে পেমেন্ট</span></div>
-    </div>
+  <div class="gm-weekly">
+    <div class="section-head"><h2>সাপ্তাহিক সেরা বিক্রি</h2><a href="deals.html">আরও দেখুন →</a></div>
+    <div class="gm-pilltabs" id="weeklyTabs"></div>
+    <div class="grid" id="weeklyGrid"></div>
   </div>
 
-  <div class="why">
-    <h2>🌿 কেন বাজার করি?</h2>
-    <div class="why-grid">
-      <div class="why-tile"><span class="why-ico">✅</span><b>সেরা মান</b><span>শুধু তাজা আর সেরা পণ্য।</span></div>
-      <div class="why-tile"><span class="why-ico">💰</span><b>সাশ্রয়ী দাম</b><span>পরিবারের বাজেটের জন্য সেরা দাম।</span></div>
-      <div class="why-tile"><span class="why-ico">🚚</span><b>দ্রুত ডেলিভারি</b><span>২৫ মিনিটে আপনার দরজায়।</span></div>
-      <div class="why-tile"><span class="why-ico">🔒</span><b>১০০% নিরাপদ</b><span>Cash on Delivery — আগে পণ্য, পরে টাকা।</span></div>
-      <div class="why-tile"><span class="why-ico">↩️</span><b>সহজ রিটার্ন</b><span>সমস্যা হলে জানান, সমাধান হবে।</span></div>
+  <div class="section-head"><h2>জনপ্রিয় দোকান</h2><a href="categories.html">সব দোকান দেখুন →</a></div>
+  <div class="gm-stores">
+    <div class="gm-store gm-store-orange"><div class="gm-store-logo">🥬</div><b>তাজা সবজি</b><span>⚡ ২৫ মিনিটে ডেলিভারি</span></div>
+    <div class="gm-store gm-store-blue"><div class="gm-store-logo">🛒</div><b>মুদি বাজার</b><span>⚡ ২৫ মিনিটে ডেলিভারি</span></div>
+    <div class="gm-store gm-store-green"><div class="gm-store-logo">💊</div><b>ফার্মেসি</b><span>⚡ ২৫ মিনিটে ডেলিভারি</span></div>
+  </div>
+
+  <div class="gm-promo-grid">
+    <div class="gm-promo gm-promo-pink"><h3>২৫ মিনিটে<br>ডেলিভারি</h3><p>অর্ডার দিলেই বাজার আপনার দরজায়</p></div>
+    <div class="gm-promo gm-promo-orange"><h3>MRP + মাত্র<br>৳৫</h3><p>প্রতি পণ্যে মাত্র ৫ টাকা বেশি — এর বেশি এক টাকাও না</p></div>
+    <div class="gm-promo gm-promo-blue"><h3>ক্যাশ অন<br>ডেলিভারি</h3><p>পণ্য হাতে পেয়ে টাকা দেবেন</p></div>
+    <div class="gm-promo gm-promo-purple"><h3>৫০টি এলাকায়<br>ডেলিভারি</h3><p>ডেমরা থানা ও আশেপাশের এলাকা</p></div>
+  </div>
+
+  <div class="gm-lime">
+    <h2>আমরা সবসময় সেরাটাই দিই</h2>
+    <p class="gm-lime-sub">অর্ডার থেকে ডেলিভারি — পুরো প্রক্রিয়াটা সহজ আর স্বচ্ছ</p>
+    <div class="gm-flow">
+      <div class="gm-flow-card"><b>১</b><h3>অর্ডার করুন</h3><p>পণ্য বেছে কার্টে নিন, ঠিকানা দিয়ে অর্ডার দিন</p></div>
+      <div class="gm-flow-card"><b>২</b><h3>ডেলিভারি ম্যান Accept করবে</h3><p>যিনি আগে Accept করবেন, অর্ডারটা তার</p></div>
+      <div class="gm-flow-card"><b>৩</b><h3>নিজের টাকায় কিনবে</h3><p>ডেলিভারি ম্যান ফোনে কনফার্ম করে নিজের টাকায় পণ্য কিনবে</p></div>
+      <div class="gm-flow-card"><b>৪</b><h3>দরজায় পৌঁছে দেবে</h3><p>২৫ মিনিটে বাজার আপনার দরজায়, টাকা দেবেন হাতে পেয়ে</p></div>
     </div>
   </div>
 
   <div id="reviewsSection"></div>
 </main>
 <div id="shellFooter"></div>
-<script src="app.js?v=38"></script>
+<script src="app.js?v=40"></script>
 </body>
 </html>

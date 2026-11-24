@@ -167,6 +167,33 @@ const AREAS = [
   { en: "Jatrabari", bn: "যাত্রাবাড়ী" },
   { en: "Shyampur", bn: "শ্যামপুর" },
   { en: "Kadamtali", bn: "কদমতলী" },
+  // v40: expanded to ALL Demra areas (Tamim, 24 Nov 2026) — Demra Thana
+  // is DSCC wards 64–70. New localities from DSCC ward lists,
+  // bn.wikipedia 70নং ওয়ার্ড page and Demra Thana Wikipedia.
+  { en: "Kamar Gop", bn: "কামার গোপ", alias: ["kamargop"] },
+  { en: "Khalapara", bn: "খলাপাড়া" },
+  { en: "Naraibagh", bn: "নারাইবাগ" },
+  { en: "Mirpara", bn: "মীরপাড়া" },
+  { en: "Rajakhali", bn: "রাজাখালী" },
+  { en: "Tengra", bn: "টেংরা", alias: ["sarulia tengra"] },
+  { en: "Deilla", bn: "দেইল্লা" },
+  { en: "Paiti", bn: "পাইটি" },
+  { en: "Kayetpara", bn: "কায়েতপাড়া" },
+  { en: "Thulthulia", bn: "ঠুলঠুলিয়া" },
+  { en: "Tamburabad", bn: "তাম্বুরাবাদ" },
+  { en: "Nolchata", bn: "নলছাটা" },
+  { en: "Dhitpur", bn: "ধীৎপুর" },
+  { en: "Durgapur", bn: "দুর্গাপুর" },
+  { en: "Mendipur", bn: "মেন্দিপুর" },
+  { en: "Shunya", bn: "শূন্যা", alias: ["shunya tengra"] },
+  { en: "Matuail Paschimpara", bn: "মাতুয়াইল পশ্চিমপাড়া" },
+  { en: "Matuail Majhpara", bn: "মাতুয়াইল মাঝপাড়া" },
+  { en: "Matuail Uttarpar", bn: "মাতুয়াইল উত্তরপাড়া" },
+  { en: "Kajlar Par", bn: "কাজলার পাড়", alias: ["kajla par"] },
+  { en: "Kazirgaon", bn: "কাজীরগাঁও" },
+  { en: "Bhanga Press", bn: "ভাঙ্গা প্রেস" },
+  { en: "Green Model Town", bn: "গ্রিন মডেল টাউন" },
+  { en: "Chanpara", bn: "চানপাড়া" },
 ];
 window.BAZARKORI_AREAS = AREAS.map(a => a.en);
 const AREA_MATCHERS = AREAS.map(a => [a.en.toLowerCase(), a.bn, ...(a.alias || []).map(s => s.toLowerCase())]);
@@ -249,6 +276,7 @@ function shellHTML() {
       <button class="btn ghost hidden" id="logoutBtn" onclick="logout()">Logout</button>
     </div>
   </div>
+  <div class="gm-hdr-line">⚡ অর্ডার করুন, <span class="gm-hdr-yellow">২৫ মিনিটে</span> পেয়ে যান!</div>
   <div class="search-row">
     <div class="search-group">
       <select id="hdrCatSelect" onchange="goCat(this.value)" aria-label="ক্যাটাগরি বেছে নিন">${cats.map(c => `<option value="${esc(c)}">${c === "All" ? "All Categories" : esc(c)}</option>`).join("")}</select>
@@ -265,11 +293,11 @@ function shellHTML() {
   <a class="nav-link${active("deals.html")}" href="deals.html">জনপ্রিয় পণ্য</a>
   <a class="nav-link${active("about.html")}" href="about.html">About Us</a>
   <a class="nav-link${active("contact.html")}" href="contact.html">Contact Us</a>
-  <a class="nav-link${active("rider.html")}" href="rider.html">🛵 রাইডার হোন</a>
+  <a class="nav-link${active("rider.html")}" href="rider.html">🛵 ডেলিভারি ম্যান হোন</a>
 </nav>
 <div id="demoBanner" class="panel" style="max-width:1200px;margin:12px auto 0;background:#fff7d6;border-color:#f5a623">
   <b>Demo / Local mode:</b> Supabase is not configured yet (placeholder in <code>supabase-config.js</code>).
-  Orders, riders and admin data are stored in this browser only. Fill in your free Supabase URL + anon key to go live — see README.md.
+  Orders, delivery men and admin data are stored in this browser only. Fill in your free Supabase URL + anon key to go live — see README.md.
   <button class="btn small gold" onclick="requestNotify()">🔔 Enable browser notifications</button>
 </div>`;
 }
@@ -289,7 +317,7 @@ function footerHTML() {
       <a href="deals.html">জনপ্রিয় পণ্য</a>
       <a href="about.html">About Us</a>
       <a href="contact.html">Contact Us</a>
-      <a href="rider.html">🛵 রাইডার হিসেবে রেজিস্টার করুন</a>
+      <a href="rider.html">🛵 ডেলিভারি ম্যান হিসেবে রেজিস্টার করুন</a>
     </div>
     <div class="footer-col">
       <b>Customer Service</b>
@@ -309,7 +337,7 @@ function footerHTML() {
       <p class="pay-badges"><span>COD</span><span>bKash</span></p>
     </div>
   </div>
-  <div class="footer-bottom">© 2026 বাজার করি — All Rights Reserved. • Riders buy with their own money and keep the delivery charge. Daily due: ৳5 per product sold + 10% of delivery charges, via bKash.</div>
+  <div class="footer-bottom">© 2026 বাজার করি — All Rights Reserved. • Delivery Men buy with their own money and keep the delivery charge. Daily due: ৳5 per product sold + 10% of delivery charges, via bKash.</div>
 </footer>`;
 }
 function mountShell() {
@@ -561,7 +589,7 @@ function openAuth() {
   <button class="btn ghost auth-secondary" onclick="closeModal()">বাতিল</button>
   <div class="auth-divider"><span>অথবা</span></div>
   <p class="auth-alt">অ্যাকাউন্ট নেই? <a href="#" onclick="openRegister();return false;">রেজিস্টার করুন</a></p>
-  <div class="rider-cta">🛵 রাইডার হতে চান? <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a></div></div>`;
+  <div class="rider-cta">🛵 ডেলিভারি ম্যান হতে চান? <a href="rider.html">ডেলিভারি ম্যান হিসেবে রেজিস্টার করুন</a></div></div>`;
   $("#modal").classList.add("open");
   attachPwEyes();
 }
@@ -573,12 +601,12 @@ const CUSTOMER_TERMS_HTML = `<div class="terms-box">
   <ul>
     <li>📍 ডেলিভারি এলাকা: Demra Thana + আশেপাশের এলাকা (${window.BAZARKORI_AREAS.join(", ")})।</li>
     <li>🚚 ডেলিভারি চার্জ: ৫ কেজি পর্যন্ত ফ্ল্যাট ৳৩০। ৫ কেজির বেশি হলে প্রতি অতিরিক্ত কেজি ৳৫ করে বাড়বে।</li>
-    <li>⏱️ রাইডার কনফার্মের পর ২৫ মিনিটে ডেলিভারি।</li>
+    <li>⏱️ ডেলিভারি ম্যান কনফার্মের পর ২৫ মিনিটে ডেলিভারি।</li>
     <li>💵 পেমেন্ট: Cash on Delivery — পণ্য হাতে পেয়ে তারপর টাকা দিন।</li>
     <li>🏷️ সব পণ্য MRP দামে — কোনো ডিসকাউন্ট বা লুকানো চার্জ নেই।</li>
-    <li>🛎️ সার্ভিস চার্জ: প্রতি পণ্যে ৳৫ (MRP-র উপরে) — এই চার্জে আমরা অর্ডার, রাইডার আর ডেলিভারি সাজিয়ে দিই।</li>
+    <li>🛎️ সার্ভিস চার্জ: প্রতি পণ্যে ৳৫ (MRP-র উপরে) — এই চার্জে আমরা অর্ডার, ডেলিভারি ম্যান আর ডেলিভারি সাজিয়ে দিই।</li>
     <li>📧 রেজিস্ট্রেশনের সময় আপনার ইমেইলে ৬ সংখ্যার ভেরিফিকেশন কোড যাবে (bazarkori.shop.bd@gmail.com থেকে) — কোডটি বসালেই অ্যাকাউন্ট চালু হবে।</li>
-    <li>📱 সঠিক মোবাইল নম্বর (১১ ডিজিট) আর আপনার এলাকার নামসহ ঠিকানা দিতে হবে — বাড়ি/রোড নম্বর দিলে ভালো, না দিলেও চলবে। ভুল নম্বর/ঠিকানায় অর্ডার নেওয়া হবে না। রাইডার পণ্য কেনার আগে আপনাকে কল করে কনফার্ম করবে যে অর্ডারটা নিবেন কিনা।</li>
+    <li>📱 সঠিক মোবাইল নম্বর (১১ ডিজিট) আর আপনার এলাকার নামসহ ঠিকানা দিতে হবে — বাড়ি/রোড নম্বর দিলে ভালো, না দিলেও চলবে। ভুল নম্বর/ঠিকানায় অর্ডার নেওয়া হবে না। ডেলিভারি ম্যান পণ্য কেনার আগে আপনাকে কল করে কনফার্ম করবে যে অর্ডারটা নিবেন কিনা।</li>
     <li>🕛 খোলা: রাত ১২টা পর্যন্ত।</li>
   </ul>
 </div>`;
@@ -589,7 +617,7 @@ function openRegister() {
   if (getPendingReg()) { showOtpStep("modal"); return; }
   const b = $("#modalBody");
   b.innerHTML = `<div class="auth-sheet"><img class="sheet-logo" src="logo.png" alt="বাজার করি"><h2>রেজিস্টার — কাস্টমার</h2>
-  <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। রাইডার হতে চাইলে নিচের লিংক দেখুন।</p>
+  <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। ডেলিভারি ম্যান হতে চাইলে নিচের লিংক দেখুন।</p>
   <label>নাম</label><input id="rName" placeholder="আপনার নাম">
   <label>ফোন নম্বর</label><input id="rPhone" placeholder="01XXXXXXXXX">
   <label>ইমেইল</label><input id="rEmail" type="email" placeholder="name@gmail.com">
@@ -601,7 +629,7 @@ function openRegister() {
   <button class="btn gold auth-primary" onclick="doRegister()">রেজিস্টার করুন</button>
   <div class="auth-divider"><span>অথবা</span></div>
   <p class="auth-alt">অ্যাকাউন্ট আছে? <a href="#" onclick="openAuth();return false;">লগইন করুন</a></p>
-  <div class="rider-cta">🛵 রাইডার হতে চান? <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a></div></div>`;
+  <div class="rider-cta">🛵 ডেলিভারি ম্যান হতে চান? <a href="rider.html">ডেলিভারি ম্যান হিসেবে রেজিস্টার করুন</a></div></div>`;
   $("#modal").classList.add("open");
   attachPwEyes();
 }
@@ -805,15 +833,15 @@ function registerFromPage() { const n = $("#rpName"), p = $("#rpPhone"), e = $("
 // approves the NID verification in the admin panel. Order receiving /
 // Accept / delivery status still work only in the rider app.
 const RIDER_TERMS_HTML = `<div class="terms-box">
-  <b>রাইডার শর্তাবলি — অনুগ্রহ করে পড়ে নিন</b>
+  <b>ডেলিভারি ম্যান শর্তাবলি — অনুগ্রহ করে পড়ে নিন</b>
   <ul>
-    <li>🛍️ কাস্টমারের প্রতিটি প্রোডাক্ট রাইডার <b>নিজের টাকায়</b> কিনবে।</li>
-    <li>🤝 বাজার করি শুধু একটি <b>মাধ্যম</b> — আমরা রাইডারকে কাস্টমার পেতে সাহায্য করি।</li>
-    <li>✨ রাইডারের সুবিধা: আমাদের মাধ্যমে <b>সহজে অর্ডার পাবে</b>, সহজে ডেলিভারি করতে পারবে।</li>
-    <li>🚚 প্রতি অর্ডারে ডেলিভারি চার্জ <b>৳৩০ — পুরোটাই রাইডারের</b> (৫ কেজির বেশি হলে প্রতি অতিরিক্ত কেজি ৳৫ — সেটাও রাইডারের)।</li>
-    <li>🏷️ <b>সার্ভিস চার্জ:</b> কাস্টমার প্রতি পণ্যে MRP-র উপরে <b>৳৫</b> বেশি দেয়। রাইডার দোকান থেকে MRP-তে কিনবে, কাস্টমারের কাছ থেকে MRP+৳৫ নেবে — এই <b>৳৫ প্রতি পণ্য</b> বাজার করি-র, রাইডারকে প্রতিদিন জমা দিতে হবে।</li>
-    <li>💰 প্রতিদিন রাইডারকে জমা দিতে হবে: <b>(৳৫ × মোট পণ্য) + ডেলিভারি চার্জের ১০%</b>। উদাহরণ: একদিনে ১০টা পণ্য ডেলিভারি + ১০টা অর্ডারের ডেলিভারি চার্জ ৳৩০০ হলে জমা = ৳৫০ + ৳৩০ = <b>৳৮০</b>।</li>
-    <li>📞 <b>কল করে কনফার্ম:</b> অর্ডার নেওয়ার পর রাইডারকে অবশ্যই কাস্টমারকে কল করে কনফার্ম করতে হবে — কাস্টমার অর্ডারটা আসলেই নেবে কিনা। কনফার্ম না হওয়া পর্যন্ত পণ্য কেনা যাবে না। কাস্টমার না নিলে / ফোনে না পেলে / ঠিকানা ভুল হলে রাইডার কারণ দিয়ে অর্ডার ক্যানসেল করবে — অর্ডারটা আবার অন্য রাইডারের কাছে যাবে, আর ক্যানসেল করা রাইডার ওই অর্ডার আর নিতে পারবে না।</li>
+    <li>🛍️ কাস্টমারের প্রতিটি প্রোডাক্ট ডেলিভারি ম্যান <b>নিজের টাকায়</b> কিনবে।</li>
+    <li>🤝 বাজার করি শুধু একটি <b>মাধ্যম</b> — আমরা ডেলিভারি ম্যানকে কাস্টমার পেতে সাহায্য করি।</li>
+    <li>✨ ডেলিভারি ম্যানের সুবিধা: আমাদের মাধ্যমে <b>সহজে অর্ডার পাবে</b>, সহজে ডেলিভারি করতে পারবে।</li>
+    <li>🚚 প্রতি অর্ডারে ডেলিভারি চার্জ <b>৳৩০ — পুরোটাই ডেলিভারি ম্যানের</b> (৫ কেজির বেশি হলে প্রতি অতিরিক্ত কেজি ৳৫ — সেটাও ডেলিভারি ম্যানের)।</li>
+    <li>🏷️ <b>সার্ভিস চার্জ:</b> কাস্টমার প্রতি পণ্যে MRP-র উপরে <b>৳৫</b> বেশি দেয়। ডেলিভারি ম্যান দোকান থেকে MRP-তে কিনবে, কাস্টমারের কাছ থেকে MRP+৳৫ নেবে — এই <b>৳৫ প্রতি পণ্য</b> বাজার করি-র, ডেলিভারি ম্যানকে প্রতিদিন জমা দিতে হবে।</li>
+    <li>💰 প্রতিদিন ডেলিভারি ম্যানকে জমা দিতে হবে: <b>(৳৫ × মোট পণ্য) + ডেলিভারি চার্জের ১০%</b>। উদাহরণ: একদিনে ১০টা পণ্য ডেলিভারি + ১০টা অর্ডারের ডেলিভারি চার্জ ৳৩০০ হলে জমা = ৳৫০ + ৳৩০ = <b>৳৮০</b>।</li>
+    <li>📞 <b>কল করে কনফার্ম:</b> অর্ডার নেওয়ার পর ডেলিভারি ম্যানকে অবশ্যই কাস্টমারকে কল করে কনফার্ম করতে হবে — কাস্টমার অর্ডারটা আসলেই নেবে কিনা। কনফার্ম না হওয়া পর্যন্ত পণ্য কেনা যাবে না। কাস্টমার না নিলে / ফোনে না পেলে / ঠিকানা ভুল হলে ডেলিভারি ম্যান কারণ দিয়ে অর্ডার ক্যানসেল করবে — অর্ডারটা আবার অন্য ডেলিভারি ম্যানের কাছে যাবে, আর ক্যানসেল করা ডেলিভারি ম্যান ওই অর্ডার আর নিতে পারবে না।</li>
   </ul>
 </div>`;
 async function registerRiderWith(name, phone, pass, email, areas) {
@@ -846,7 +874,7 @@ function riderLoginFromPage() {
   if (!phone) return toast(PHONE_ERR);
   const u = users().find(x => x.phone === phone);
   if (!u || u.pass !== w.value) return toast("ভুল ফোন নম্বর বা পাসওয়ার্ড।");
-  if (u.role !== "rider") return toast("এই নম্বরে রাইডার অ্যাকাউন্ট নেই — নিচে রেজিস্টার করুন।");
+  if (u.role !== "rider") return toast("এই নম্বরে ডেলিভারি ম্যান অ্যাকাউন্ট নেই — নিচে রেজিস্টার করুন।");
   if (u.banned) return toast("Your account is OFF / banned. Contact the owner on WhatsApp after payment.");
   save("bazar_session", u); renderAll();
   toast("Logged in as " + u.name);
@@ -857,7 +885,7 @@ function riderRegisterView() {
   <div id="riderForm" style="margin-top:16px">
   <div class="login-grid">
     <div class="panel">
-      <h2>রেজিস্টার — রাইডার</h2>
+      <h2>রেজিস্টার — ডেলিভারি ম্যান</h2>
       ${RIDER_TERMS_HTML}
       <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="rrAgree" style="width:auto;margin-top:4px"> <span>হ্যাঁ, উপরের সব শর্তে আমি রাজি</span></label>
       <label>নাম (NID-র নামের সাথে মিলতে হবে)</label><input id="rrName" placeholder="আপনার নাম">
@@ -871,10 +899,10 @@ function riderRegisterView() {
     </div>
     <div class="panel">
       <h2>আগে রেজিস্টার করেছেন?</h2>
-      <p class="muted">রাইডার অ্যাকাউন্ট থাকলে লগইন করুন — NID ভেরিফিকেশন দিতে পারবেন।</p>
+      <p class="muted">ডেলিভারি ম্যান অ্যাকাউন্ট থাকলে লগইন করুন — NID ভেরিফিকেশন দিতে পারবেন।</p>
       <label>ফোন নম্বর</label><input id="rlPhone" placeholder="01XXXXXXXXX">
       <label>পাসওয়ার্ড</label><input id="rlPass" type="password" placeholder="পাসওয়ার্ড">
-      <button class="btn gold" style="width:100%;margin-top:10px" onclick="riderLoginFromPage()">রাইডার লগইন</button>
+      <button class="btn gold" style="width:100%;margin-top:10px" onclick="riderLoginFromPage()">ডেলিভারি ম্যান লগইন</button>
     </div>
   </div>
   </div>
@@ -922,7 +950,7 @@ function renderRiderPage() {
     el.innerHTML = riderVerifyView(s); refreshRiderStatus(); return;
   }
   // Steps 1+2: disclaimer + form (+ returning-rider login).
-  const note = (s && s.role !== "rider") ? `<div class="panel" style="background:#fff7d6;border-color:#f5a623">আপনি <b>${esc(s.name)}</b> (${esc(s.role)}) হিসেবে লগইন করা আছেন — রাইডার রেজিস্ট্রেশন করতে আগে Logout করুন। <button class="btn small ghost" onclick="logout()">Logout</button></div>` : "";
+  const note = (s && s.role !== "rider") ? `<div class="panel" style="background:#fff7d6;border-color:#f5a623">আপনি <b>${esc(s.name)}</b> (${esc(roleLabel(s.role))}) হিসেবে লগইন করা আছেন — ডেলিভারি ম্যান রেজিস্ট্রেশন করতে আগে Logout করুন। <button class="btn small ghost" onclick="logout()">Logout</button></div>` : "";
   el.innerHTML = note + riderRegisterView();
   // A rider registration waiting for its email code survives a reload.
   const pending = getPendingReg();
@@ -1246,14 +1274,44 @@ function renderCatTiles() {
   el.innerHTML = window.BAZARKORI_CATEGORIES.map(c => {
     const ps = window.BAZARKORI_PRODUCTS.filter(p => p.category === c);
     const first = ps[0]; if (!first) return "";
-    return `<div class="cat-tile" onclick="goCat('${esc(c)}')">
-      <img src="${first.img}" alt="${esc(c)}" loading="lazy" onerror="this.style.display='none'">
-      <b>${esc(c)}</b><span>${ps.length} টি পণ্য</span></div>`;
-  }).join("");
+    return `<div class="cat-tile gm-cat" onclick="goCat('${esc(c)}')">
+      <div class="gm-cat-text"><b>${esc(c)}</b><span>${ps.length} টি পণ্য</span></div>
+      <img src="${first.img}" alt="${esc(c)}" loading="lazy" onerror="this.style.display='none'"></div>`;
+  }).join("") + `<div class="cat-tile gm-cat-all" onclick="location.href='categories.html'"><span>→</span><b>সব দেখুন</b></div>`;
   animatePage(); // v33: observe the fresh tiles for the scroll reveal
 }
 function setCat(c) { activeCat = c; renderProducts(); }
 function is18(p) { return ["Tong & Smokestore", "Smokeless & Vape", "Sexual Wellness"].includes(p.category); }
+// ---------- Gromuse product card (v40) ----------
+// ONE shared card for the categories grid, the popular strip and the
+// weekly best sellers — name, category, unit, selling price, and a
+// stepper when the product is already in the cart, else a "+" pill.
+// The "+" pill keeps onclick="...addToCart(ID)" so flyToCart's
+// [onclick*="addToCart(ID)"] selector still finds it.
+function productCardHTML(p, sold) {
+  const f = cart().find(x => String(x.id) === String(p.id));
+  const qty = f ? f.qty : 0;
+  const action = qty > 0
+    ? `<div class="gm-action"><div class="gm-stepper"><button onclick="event.stopPropagation();changeQty(${p.id},-1)" aria-label="কমান">−</button><span>${qty}</span><button onclick="event.stopPropagation();changeQty(${p.id},1)" aria-label="বাড়ান">+</button></div></div>`
+    : `<div class="gm-action"><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">+</button></div>`;
+  return `<div class="card gm-card" onclick="openProduct(${p.id})">
+    <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
+    <div class="pad"><h3>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h3>
+    <div class="gm-sub">${esc(p.category)}</div>
+    <div class="gm-weight">${esc(p.unit)}</div>
+    <div class="gm-price">${fmt(sellPrice(p))}</div>
+    ${action}
+    ${sold ? `<div class="muted">🔥 ${bn(sold)} বার বিক্রি হয়েছে</div>` : ""}</div></div>`;
+}
+// After a cart change, re-render the visible product grids so the
+// stepper appears / updates immediately. Guarded by element existence;
+// renderProducts/renderDeals/renderWeekly never call addToCart/changeQty,
+// so this cannot loop. The checkout popup is untouched (no grid there).
+function refreshProductGrids() {
+  if (document.getElementById("grid")) renderProducts();
+  if (document.getElementById("deals")) renderDeals();
+  if (document.getElementById("weeklyGrid")) renderWeekly();
+}
 let _prodRetry = 0;
 function renderProducts() {
   const grid = $("#grid"); if (!grid) return;
@@ -1277,11 +1335,7 @@ function renderProducts() {
   // v28: the categories subtitle shows the LIVE catalog size (was hard-coded ২৩৬টি).
   const ccl = $("#catCountLine");
   if (ccl) ccl.textContent = bn(window.BAZARKORI_PRODUCTS.length.toLocaleString("en-US")) + "টি পণ্য — ক্যাটাগরি বেছে নিন, খুঁজুন, দাম দিয়ে সাজান। পণ্যে ক্লিক করলে বিস্তারিত দেখতে পাবেন।";
-  grid.innerHTML = list.map(p => `<div class="card" onclick="openProduct(${p.id})">
-    <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
-    <div class="pad"><h3>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h3>
-    <div class="unit">${esc(p.unit)} • ${esc(p.category)}</div>
-    <div class="row"><span class="price">${fmt(sellPrice(p))}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div></div></div>`).join("") || "<p>No products found.</p>";
+  grid.innerHTML = list.map(p => productCardHTML(p)).join("") || "<p>No products found.</p>";
   // v33: the DOMContentLoaded re-render (v15.1) rebuilds this grid AFTER
   // renderAll — so the reveal observer must be (re)attached here, on the
   // fresh nodes, not only at the end of renderAll.
@@ -1323,12 +1377,7 @@ function renderDeals() {
   // Home strip: hide the whole section while nothing qualifies yet.
   const sec = $("#popularSection");
   if (sec) sec.style.display = list.length ? "" : "none";
-  el.innerHTML = list.length ? list.map(({ p, sold }) => `<div class="card" onclick="openProduct(${p.id})">
-    <img src="${p.img}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">
-    <div class="pad"><h3>${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h3>
-    <div class="unit">${esc(p.unit)} • ${esc(p.category)}</div>
-    <div class="row"><span class="price">${fmt(sellPrice(p))}</span><button class="add" onclick="event.stopPropagation();addToCart(${p.id})">ADD</button></div>
-    <div class="muted">🔥 ${bn(sold)} বার বিক্রি হয়েছে</div></div></div>`).join("")
+  el.innerHTML = list.length ? list.map(({ p, sold }) => productCardHTML(p, sold)).join("")
     : (PAGE === "deals.html" ? "<p>এখনো কোনো পণ্য ১৫টির বেশি বিক্রি হয়নি — বিক্রি বাড়লেই জনপ্রিয় পণ্যগুলো এখানে আসবে।</p>" : "");
   animatePage(); // v33: observe the fresh cards for the scroll reveal
 }
@@ -1336,6 +1385,38 @@ function renderFeatured() {
   // v13 featured strip is now the "আজকের জনপ্রিয় পণ্য" section; kept as an
   // alias so any older caller still works.
   renderDeals();
+}
+// ---------- Weekly best selling (v40, Gromuse "Weekly best selling items") ----------
+// Pill tabs over the top 8 categories ranked by total units sold in
+// DELIVERED orders only (same productSales() as Popular). "সব" shows the
+// top 10 sold products across all categories; a category tab shows its
+// top 10 by units sold. Rendered into #weeklyTabs / #weeklyGrid when
+// those exist (the section lives in index.html); otherwise a no-op.
+let _weeklyTab = "সব";
+function renderWeekly(tab) {
+  const tabsEl = document.getElementById("weeklyTabs");
+  const gridEl = document.getElementById("weeklyGrid");
+  if (!tabsEl && !gridEl) return;
+  if (tab) _weeklyTab = tab;
+  const sales = productSales();
+  const catSales = {};
+  for (const [id, n] of Object.entries(sales)) {
+    const p = window.BAZARKORI_PRODUCTS.find(x => x.id === Number(id));
+    if (!p) continue;
+    catSales[p.category] = (catSales[p.category] || 0) + n;
+  }
+  const topCats = Object.entries(catSales).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c]) => c);
+  const tabs = ["সব", ...topCats];
+  if (_weeklyTab !== "সব" && !topCats.includes(_weeklyTab)) _weeklyTab = "সব";
+  if (tabsEl) tabsEl.innerHTML = tabs.map(c => `<button class="gm-tab${c === _weeklyTab ? " active" : ""}" onclick="renderWeekly('${esc(c)}')">${esc(c)}</button>`).join("");
+  if (!gridEl) return;
+  const list = window.BAZARKORI_PRODUCTS
+    .filter(p => (_weeklyTab === "সব" || p.category === _weeklyTab) && (sales[p.id] || 0) > 0)
+    .sort((a, b) => (sales[b.id] || 0) - (sales[a.id] || 0))
+    .slice(0, 10);
+  gridEl.innerHTML = list.length ? list.map(p => productCardHTML(p, sales[p.id])).join("")
+    : "<p>এখনো এই ক্যাটাগরিতে ১৫টির বেশি বিক্রি হয়নি — বিক্রি বাড়লেই এখানে আসবে।</p>";
+  animatePage(); // v33: observe the fresh cards for the scroll reveal
 }
 // ---------- Product detail POPUP (v20) ----------
 // Tapping a product card opens a popup on the SAME page — no navigation.
@@ -1349,18 +1430,20 @@ function openProduct(id) {
 function openProductPopup(id) {
   const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return;
   popQty = 1; popProductId = id;
-  openModal(`<div class="pop">
+  openModal(`<div class="pop gm-detail">
     <button class="pop-close" onclick="closeModal()" aria-label="Close">✕</button>
-    <div class="pop-img"><img src="${p.img}" alt="${esc(p.name)}" onerror="this.onerror=null;this.src='logo.png'"></div>
+    <div class="gm-detail-img"><img src="${p.img}" alt="${esc(p.name)}" onerror="this.onerror=null;this.src='logo.png'"></div>
+    <div class="gm-detail-info">
+    <p class="gm-detail-store">বাজার করি • ${esc(p.category)}</p>
     <h2 class="pop-title">${esc(p.name)} ${is18(p) ? '<span class="tag18">18+ • Stealth Pack</span>' : ""}</h2>
-    <p class="pop-unit">Size: <b>${esc(p.unit)}</b> • Category: <b>${esc(p.category)}</b></p>
-    <p class="pop-price">${fmt(sellPrice(p))}</p>
-    <p class="muted" style="margin:0">MRP ${fmt(p.price)} + ৳৫ সার্ভিস চার্জ</p>
-    <p class="muted">MRP + ৳৫ সার্ভিস চার্জ • In stock • ২৫ মিনিটে ডেলিভারি • ফ্ল্যাট ৳৩০ • Cash on Delivery${is18(p) ? " • Discreet Stealth Pack." : ""}</p>
+    <p class="pop-unit">Size: <b>${esc(p.unit)}</b></p>
+    <p class="gm-detail-price">${fmt(sellPrice(p))}</p>
+    <p class="muted">MRP ${fmt(p.price)} + ৳৫ সার্ভিস চার্জ • In stock • ২৫ মিনিটে ডেলিভারি • ডেলিভারি ৳৩০ (৫ কেজি পর্যন্ত) • Cash on Delivery</p>
     <div class="qty-row"><button class="qty-btn" onclick="popQtyChange(-1)" aria-label="Decrease quantity">−</button><span id="popQty">1</span><button class="qty-btn" onclick="popQtyChange(1)" aria-label="Increase quantity">+</button>
-    <button class="btn gold" id="popAddBtn" onclick="addPopToCart()">Add to Cart — ${fmt(sellPrice(p))}</button></div>
-    <button class="btn ghost" style="width:100%" onclick="openCartPopup()">🛒 View Cart</button>
+    <button class="btn gm-detail-add" id="popAddBtn" onclick="addPopToCart()">Add to Cart — ${fmt(sellPrice(p))}</button></div>
+    <button class="btn ghost gm-detail-add2" style="width:100%" onclick="openCartPopup()">🛒 View Cart</button>
     <p style="text-align:center"><a href="javascript:void(0)" onclick="closeModal()">← Continue shopping</a></p>
+    </div>
   </div>`);
 }
 function popQtyChange(d) {
@@ -1390,9 +1473,9 @@ function addPopToCart() {
 // ---------- Cart & Checkout ----------
 const cart = () => ls("bazar_cart", []);
 const setCart = c => save("bazar_cart", c);
-function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: sellPrice(p), mrp: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); flyToCart(id, p.img); toast(p.name + " added."); }
+function addToCart(id) { const p = window.BAZARKORI_PRODUCTS.find(x => x.id === id); if (!p) return; const c = cart(); const f = c.find(x => x.id === id); if (f) f.qty++; else c.push({ id, name: p.name + " " + p.unit, price: sellPrice(p), mrp: p.price, qty: 1, img: p.img }); setCart(c); renderCart(); refreshProductGrids(); flyToCart(id, p.img); toast(p.name + " added."); }
 function addCustomItem() { const inp = $("#customItem"); if (!inp) return; const v = inp.value.trim(); if (!v) return; const c = cart(); c.push({ id: "custom-" + Date.now(), name: v + " (custom request)", price: 0, mrp: 0, qty: 1, img: "" }); setCart(c); inp.value = ""; renderCart(); toast("Custom item added — we will confirm its price."); }
-function changeQty(id, d) { const c = cart(); const f = c.find(x => String(x.id) === String(id)); if (!f) return; f.qty += d; if (f.qty <= 0) c.splice(c.indexOf(f), 1); setCart(c); renderCart(); }
+function changeQty(id, d) { const c = cart(); const f = c.find(x => String(x.id) === String(id)); if (!f) return; f.qty += d; if (f.qty <= 0) c.splice(c.indexOf(f), 1); setCart(c); renderCart(); refreshProductGrids(); }
 function toggleCart() { openCartPopup(); }
 function renderCart() {
   const c = cart(); const sub = cartSellSub(c); // MRP + ৳5 service per unit (v24)
@@ -1499,7 +1582,7 @@ async function createOrder(name, phone, addr, area) {
   _lastIssuedCodeNum = nextNum;
   const o = { code: "LN-" + nextNum, customer: name, phone, area, address: addr, items: c, subtotal: sub, mrpSubtotal: sub - svc, serviceFee: svc, fee: fb.fee, weightKg: Math.round(fb.weightKg * 100) / 100, total: sub + fb.fee, status: "placed", statusLog: { placed: new Date().toISOString() }, rider: "", created: new Date().toISOString(), date: todayStr() };
   const all = orders(); all.unshift(o); setOrders(all); setCart([]);
-  notify("Order " + o.code + " placed! Broadcasting to online riders…");
+  notify("Order " + o.code + " placed! Broadcasting to online delivery men…");
   emailOrderNotify(o); // fire-and-forget; admin badge/sound above still fires regardless
   // v34: await the insert — on a unique-violation race it reassigns a fresh
   // code and updates the saved local row; the returned order carries the
@@ -1807,7 +1890,7 @@ function sbRowToOrder(r, ex) {
 
 // ---------- Live countdown tracking (v9) ----------
 // The countdown runs 25:00 from the moment a rider ACCEPTS. Before that the
-// popup waits ("রাইডার কনফার্মের অপেক্ষায়…") and no timer runs. After 00:00
+// popup waits ("ডেলিভারি ম্যান কনফার্মের অপেক্ষায়…") and no timer runs. After 00:00
 // it flips to overtime, counting UP ("+03:12") with a calm "দেরি হচ্ছে" label.
 // When delivered it shows the total time taken and whether it was late.
 const DELIVERY_TARGET_MS = 25 * 60 * 1000;
@@ -1830,7 +1913,7 @@ function timerState(o, nowMs) {
 }
 function timerDisplay(o, nowMs) {
   const st = timerState(o, nowMs);
-  if (st.phase === "waiting") return Object.assign(st, { big: bn(25) + ":০০", sub: "রাইডার কনফার্মের অপেক্ষায়… — রাইডার কনফার্ম করলেই টাইমার শুরু হবে", cls: "waiting" });
+  if (st.phase === "waiting") return Object.assign(st, { big: bn(25) + ":০০", sub: "ডেলিভারি ম্যান কনফার্মের অপেক্ষায়… — ডেলিভারি ম্যান কনফার্ম করলেই টাইমার শুরু হবে", cls: "waiting" });
   if (st.phase === "counting") return Object.assign(st, { big: fmtMMSS(st.remainingMs), sub: "ডেলিভারি হতে বাকি আছে", cls: "counting" });
   if (st.phase === "overtime") {
     const m = Math.floor(st.overtimeMs / 60000), s = Math.floor(st.overtimeMs % 60000 / 1000);
@@ -1879,16 +1962,16 @@ function renderTrackPopup() {
   const t = timerDisplay(o);
   const unmatched = o.status === "placed" && !ridersCovering(o.area).length;
   $("#modalBody").innerHTML = `<div class="track-pop">
-  ${trackJustPlaced ? `<div class="placed-check">✓</div><h2 style="margin:4px 0 0">অর্ডার কনফার্ম হয়েছে! 🎉</h2><p class="muted" style="margin:4px 0 0">অর্ডার নম্বর: <b>${o.code}</b> — রাইডার খুঁজছি…</p>` : `<h2 style="margin-top:0">📍 লাইভ ট্র্যাক — ${o.code}</h2>`}
+  ${trackJustPlaced ? `<div class="placed-check">✓</div><h2 style="margin:4px 0 0">অর্ডার কনফার্ম হয়েছে! 🎉</h2><p class="muted" style="margin:4px 0 0">অর্ডার নম্বর: <b>${o.code}</b> — ডেলিভারি ম্যান খুঁজছি…</p>` : `<h2 style="margin-top:0">📍 লাইভ ট্র্যাক — ${o.code}</h2>`}
   <p class="muted">${fmt(o.total)} • ${esc(o.area)} • ${esc(o.address || "")}</p>
   <p class="muted">⚖️ মোট ওজন: ${fmtKg((o.weightKg != null && o.weightKg > 0) ? o.weightKg : cartWeightKg(o.items))} • ডেলিভারি চার্জ ${fmt(orderFee(o))}</p>
   ${o.status === "cancelled" ? `<p class="area-warn">❌ এই অর্ডারটি ক্যানসেল করা হয়েছে।</p>` : trackerHTML(o)}
-  ${o.callConfirmedAt ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(o.callConfirmedAt)}</p>` : ""}
-  ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (${esc(lastCancelText(o))})</p>` : ""}
+  ${o.callConfirmedAt ? `<p>📞 ডেলিভারি ম্যান কল করে কনফার্ম করেছে • ${fmtTime(o.callConfirmedAt)}</p>` : ""}
+  ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ ডেলিভারি ম্যান ক্যানসেল করেছে — নতুন ডেলিভারি ম্যান খুঁজছি… (${esc(lastCancelText(o))})</p>` : ""}
   ${o.status === "cancelled" ? "" : `<div class="track-timer ${t.cls}">${t.big}</div>
   <p class="track-sub">${t.sub}</p>`}
-  ${unmatched ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো রাইডার নেই</p>` : ""}
-  ${o.rider ? `<p>🚴 রাইডার: <b>${esc(o.rider)}</b></p>` : `<p class="muted">রাইডার এখনো অর্ডারটি নেয়নি — কনফার্ম হলেই টাইমার শুরু হবে।</p>`}
+  ${unmatched ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো ডেলিভারি ম্যান নেই</p>` : ""}
+  ${o.rider ? `<p>🚴 ডেলিভারি ম্যান: <b>${esc(o.rider)}</b></p>` : `<p class="muted">ডেলিভারি ম্যান এখনো অর্ডারটি নেয়নি — কনফার্ম হলেই টাইমার শুরু হবে।</p>`}
   ${(o.status === "placed" || o.status === "accepted") ? `<button class="btn danger" style="width:100%;margin-top:8px" onclick="askCustomerCancel('${o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : ""}
   ${o.status === "delivered" ? (reviewForOrder(o.code) ? `<p class="muted">⭐ আপনি এই অর্ডারে রিভিউ দিয়েছেন — ধন্যবাদ!</p>` : (!reviewDismissed(o.code) ? `<button class="btn gold" style="width:100%;margin-top:8px" onclick="openReviewPopup('${o.code}')">⭐ রিভিউ দিন</button>` : "")) : ""}
   <p class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</p>
@@ -2071,11 +2154,11 @@ function renderMyOrders() {
     return `<div class="panel"><b>${o.code}</b> • ${fmt(o.total)} • ${esc(o.area)} • <span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>
     <button class="btn small gold" onclick="openTrackPopup('${o.code}')">📍 লাইভ ট্র্যাক</button>
     ${(o.status === "placed" || o.status === "accepted") ? `<button class="btn small danger" onclick="askCustomerCancel('${o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : ""}
-    ${o.status === "placed" && !ridersCovering(o.area).length ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো রাইডার নেই</p>` : ""}
+    ${o.status === "placed" && !ridersCovering(o.area).length ? `<p class="area-warn">⚠️ এই এলাকায় এখন কোনো ডেলিভারি ম্যান নেই</p>` : ""}
     ${o.status === "cancelled" ? `<p class="area-warn">❌ এই অর্ডারটি ক্যানসেল করা হয়েছে।</p>` : `<div class="timeline">${STEPS.map((st, i) => `<div class="step ${i < idx ? "done" : i === idx ? "now" : ""}">${i < idx ? "✓ " : ""}${st[1]}${log[st[0]] ? `<br><span class="muted">${fmtTime(log[st[0]])}</span>` : ""}</div>`).join("")}</div>`}
-    ${log.callConfirmed ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(log.callConfirmed)}</p>` : ""}
-    ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ রাইডার ক্যানসেল করেছে — নতুন রাইডার খুঁজছি… (${esc(lastCancelText(o))})</p>` : ""}
-    ${o.rider ? `<p>🚴 রাইডার: <b>${esc(o.rider)}</b>${o.status === "delivered" ? " • ডেলিভারি সম্পন্ন হয়েছে। ধন্যবাদ!" : o.status === "on_the_way" ? " • আপনার পার্সেল নিয়ে রাস্তায় আছে, শীঘ্রই পৌঁছে যাবে।" : o.status === "picked_up" ? " • পণ্য কিনে ফেলেছে, এখন রওনা হবে।" : " • আপনার অর্ডার নিয়েছে।"}</p>` : "<p class='muted'>রাইডারের জন্য অপেক্ষা করছি…</p>"}
+    ${log.callConfirmed ? `<p>📞 ডেলিভারি ম্যান কল করে কনফার্ম করেছে • ${fmtTime(log.callConfirmed)}</p>` : ""}
+    ${(o.cancelHistory || []).length && o.status === "placed" ? `<p class="area-warn">⚠️ ডেলিভারি ম্যান ক্যানসেল করেছে — নতুন ডেলিভারি ম্যান খুঁজছি… (${esc(lastCancelText(o))})</p>` : ""}
+    ${o.rider ? `<p>🚴 ডেলিভারি ম্যান: <b>${esc(o.rider)}</b>${o.status === "delivered" ? " • ডেলিভারি সম্পন্ন হয়েছে। ধন্যবাদ!" : o.status === "on_the_way" ? " • আপনার পার্সেল নিয়ে রাস্তায় আছে, শীঘ্রই পৌঁছে যাবে।" : o.status === "picked_up" ? " • পণ্য কিনে ফেলেছে, এখন রওনা হবে।" : " • আপনার অর্ডার নিয়েছে।"}</p>` : "<p class='muted'>ডেলিভারি ম্যানের জন্য অপেক্ষা করছি…</p>"}
     ${o.status === "delivered" ? (rv ? `<p class="muted">⭐ আপনি এই অর্ডারে ${starRow(rv.stars)} রিভিউ দিয়েছেন — ধন্যবাদ!</p>` : (!reviewDismissed(o.code) ? `<button class="btn small gold" onclick="openReviewPopup('${o.code}')">⭐ রিভিউ দিন</button>` : "")) : ""}
     <p class="muted">${o.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</p></div>`;
   }).join("") : "<p>এখনো কোনো অর্ডার নেই — প্রথম অর্ডার করলেই এখানে দেখাবে।</p>");
@@ -2133,7 +2216,7 @@ function renderRider() {
   const el = $("#riderPanel") || $("#riderMain");
   if (!el) return;
   const s = session();
-  if (!s || s.role !== "rider") { el.innerHTML = `<p>রাইডার হোন — লগইন করুন অথবা <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a>।</p>`; return; }
+  if (!s || s.role !== "rider") { el.innerHTML = `<p>ডেলিভারি ম্যান হোন — লগইন করুন অথবা <a href="rider.html">ডেলিভারি ম্যান হিসেবে রেজিস্টার করুন</a>।</p>`; return; }
   const me = users().find(u => u.phone === s.phone) || s;
   // v25: re-broadcast pool skips orders THIS rider cancelled (declinedBy).
   const pool = orders().filter(o => o.status === "placed" && (me.areas || []).includes(o.area) && !(o.declinedBy || []).includes(me.name));
@@ -2154,30 +2237,30 @@ function renderRider() {
     ? `<div class="r-new-alert">🔔 নতুন অর্ডার এসেছে! ${[...new Set(freshPool.map(o => o.code))].join(", ")} — নিচে দেখুন, প্রথমে Accept করলেই অর্ডারটি আপনার।</div>` : "";
   el.innerHTML = `
   <p><b>${esc(me.name)}</b> • ${esc(me.phone)} • ${esc(me.area)} •
-  <span class="pill ${me.banned ? "bad" : me.verified ? "ok" : "warn"}">${me.banned ? "OFF / Banned" : me.verified ? "Verified Rider" : "Not Verified — " + me.vstatus}</span>
+  <span class="pill ${me.banned ? "bad" : me.verified ? "ok" : "warn"}">${me.banned ? "OFF / Banned" : me.verified ? "Verified Delivery Man" : "Not Verified — " + me.vstatus}</span>
   ${me.banned ? "<p><b>Your account is OFF.</b> Pay your daily 10% on WhatsApp to the owner, then the admin will re-activate you.</p>" : ""}</p>
-  <h3>Verification (NID)</h3>
+  <h3 class="gm-panel-head">Verification (NID)</h3>
   ${me.verified ? "<p class='pill ok'>Verified — you can go online.</p>" : `<p>Upload your photo + NID front/back. Your profile name must match your NID name.</p>
   <label>Your Photo</label><input type="file" accept="image/*" id="vPhoto"><label>NID Front</label><input type="file" accept="image/*" id="vFront"><label>NID Back</label><input type="file" accept="image/*" id="vBack">
   <label>NID Name</label><input id="vName" placeholder="Name exactly as on NID"><label>NID Number</label><input id="vNid" placeholder="NID number">
   <button class="btn" onclick="submitVerification()">Submit Verification</button>
   <p class="muted">Status: ${ver ? ver.status : me.vstatus}</p>`}
-  <h3>Online / Offline</h3>
+  <h3 class="gm-panel-head">Online / Offline</h3>
   <button class="btn ${me.online ? "danger" : "gold"}" onclick="toggleOnline()">${me.online ? "Go Offline" : "Go Online"}</button>
   <span class="muted">${me.online ? "You will receive new order broadcasts." : "Offline — no orders will come to you."}</span>
-  <h3>📍 আমার ডেলিভারি এলাকা</h3>
+  <h3 class="gm-panel-head">📍 আমার ডেলিভারি এলাকা</h3>
   ${!me.areas || !me.areas.length ? `<p class="area-warn">⚠️ আপনি এখনো ডেলিভারি এলাকা ঠিক করেননি — এলাকা ঠিক না করলে আপনার কাছে অর্ডার আসবে না। নিচের এলাকাগুলো থেকে বেছে নিন।</p>` : `<p class="muted">শুধু এই এলাকাগুলোর অর্ডার আপনার কাছে আসবে। বদলাতে চাইলে নিচে ঠিক করে সংরক্ষণ করুন।</p>`}
   <div class="area-checks">${window.BAZARKORI_AREAS.map(a => `<label class="area-check"><input type="checkbox" class="areaCb" value="${esc(a)}" ${me.areas && me.areas.includes(a) ? "checked" : ""}> ${esc(a)}</label>`).join("")}</div>
   <button class="btn" onclick="saveRiderAreas()">এলাকা সংরক্ষণ করুন</button>
-  <h3>Today — ${todayStr()}</h3>
+  <h3 class="gm-panel-head">Today — ${todayStr()}</h3>
   <div class="statgrid"><div class="stat"><b>${doneToday.length}</b>Orders delivered</div><div class="stat"><b>${fmt(earnings)}</b>Delivery earnings</div><div class="stat"><b>${fmt(rd.service)}</b>সার্ভিস চার্জ (৳৫ × পণ্য)</div><div class="stat"><b>${fmt(rd.deliveryDue)}</b>10% of delivery</div><div class="stat"><b>${fmt(due)}</b>মোট জমা দিতে হবে</div><div class="stat"><b>${fmt(pay.sent || 0)}</b>Sent (TrxID: ${esc(pay.trxid || "—")})</div></div>
   <p>Send <b>${fmt(due - (pay.sent || 0))}</b> today via bKash to owner: <b>${BKASH}</b></p>
   <label>Amount sent (৳)</label><input id="payAmt" type="number" placeholder="e.g. 6"><label>bKash TrxID</label><input id="payTrx" placeholder="TrxID">
   <button class="btn" onclick="markPaid()">I Sent via bKash</button>
-  <h3>🔔 New Orders (broadcast pool — first Accept wins)</h3>
+  <h3 class="gm-panel-head">🔔 New Orders (broadcast pool — first Accept wins)</h3>
   ${newAlert}
-  ${!me.verified || me.banned || !me.online ? "<p class='muted'>Go online as a verified rider to see new orders.</p>" : !(me.areas && me.areas.length) ? "<p class='muted'>আগে উপরে আপনার ডেলিভারি এলাকা ঠিক করুন — এলাকা ছাড়া অর্ডার আসবে না।</p>" : pool.length ? pool.map(o => riderOrderPreviewHTML(o)).join("") : "<p>No new orders right now.</p>"}
-  <h3>My Active Deliveries</h3>
+  ${!me.verified || me.banned || !me.online ? "<p class='muted'>Go online as a verified delivery man to see new orders.</p>" : !(me.areas && me.areas.length) ? "<p class='muted'>আগে উপরে আপনার ডেলিভারি এলাকা ঠিক করুন — এলাকা ছাড়া অর্ডার আসবে না।</p>" : pool.length ? pool.map(o => riderOrderPreviewHTML(o)).join("") : "<p>No new orders right now.</p>"}
+  <h3 class="gm-panel-head">My Active Deliveries</h3>
   ${orders().filter(o => o.rider === me.name && o.status === "cancelled" && o.cancelledBy === "customer" && o.date === todayStr()).map(o => `<p class="area-warn">⚠️ কাস্টমার ক্যানসেল করেছে: <b>${esc(o.code)}</b></p>`).join("")}
   ${mine.length ? mine.map(o => {
     const idx = STATUS_FLOW.indexOf(o.status);
@@ -2196,7 +2279,7 @@ function renderRider() {
       <a class="btn gold" style="display:inline-block;margin-top:8px;text-decoration:none" href="tel:${esc(o.phone)}">📞 ${esc(o.phone)} — কল করুন</a>
       <button class="btn" style="margin-top:8px" onclick="confirmCall('${o.sbId || o.code}')">✅ কাস্টমার কনফার্ম করেছে</button>
       <p class="muted">কাস্টমার না নিলে নিচে "অর্ডার ক্যানসেল করুন" চাপুন — পণ্য কিনবেন না।</p></div>` : "";
-    const callDoneLine = o.callConfirmedAt ? `<p>📞 রাইডার কল করে কনফার্ম করেছে • ${fmtTime(o.callConfirmedAt)}</p>` : "";
+    const callDoneLine = o.callConfirmedAt ? `<p>📞 ডেলিভারি ম্যান কল করে কনফার্ম করেছে • ${fmtTime(o.callConfirmedAt)}</p>` : "";
     // v25 cancel: visible after Accept, any time before delivery.
     const cancelBtn = o.status !== "delivered" ? `<button class="btn danger" style="width:100%;margin-top:6px" onclick="askCancel('${o.sbId || o.code}')">❌ অর্ডার ক্যানসেল করুন</button>` : "";
     return `<div class="panel"><b>${o.code}</b> — ${STATUS_BN[o.status]} • ${fmt(o.total)} • ${esc(o.address)}<br>
@@ -2213,7 +2296,7 @@ function renderRider() {
     ${cancelBtn}
     <p class="muted">এক ধাপ করে আপডেট করুন — কাস্টমার তার ফোনে সাথে সাথে দেখতে পাবে।</p></div>`;
   }).join("") : "<p>এখনো কোনো ডেলিভারি নেই।</p>"}
-  <h3>✅ আজ ডেলিভারি হয়েছে</h3>
+  <h3 class="gm-panel-head">✅ আজ ডেলিভারি হয়েছে</h3>
   ${doneToday.length ? doneToday.map(o => `<div class="panel"><b>${o.code}</b> — ${fmt(o.total)} • ${esc(o.customer)} (${esc(o.phone)})<br><span class="muted">${timerDisplay(o).sub}</span><br>${waThanksBtn(o)}</div>`).join("") : "<p>আজ এখনো কোনো ডেলিভারি হয়নি।</p>"}`;
 }
 function submitVerification() {
@@ -2231,14 +2314,14 @@ function submitVerification() {
 }
 function toggleOnline() {
   const s = session(); if (!s) return; const all = users(); const me = all.find(u => u.phone === s.phone);
-  if (!me.verified) return toast("Verify your NID first — unverified riders cannot go online.");
+  if (!me.verified) return toast("Verify your NID first — unverified delivery men cannot go online.");
   if (me.banned) return toast("Account is OFF. Pay and contact the owner.");
   me.online = !me.online; setUsers(all); save("bazar_session", me); syncOnlineToSupabase(me); renderAll();
 }
 async function acceptOrder(code) {
   const s = session(); if (!s) return;
   const all = orders(); const o = findInList(all, code);
-  if (!o || o.status !== "placed") return toast("Too late — another rider already accepted this order.");
+  if (!o || o.status !== "placed") return toast("Too late — another delivery man already accepted this order.");
   // v25: a rider who cancelled this order can never take it again.
   if ((o.declinedBy || []).includes(s.name)) return toast("আপনি এই অর্ডারটি ক্যানসেল করেছেন — আর নিতে পারবেন না।");
   // v33: first Accept wins, enforced on Supabase — the conditional claim
@@ -2246,7 +2329,7 @@ async function acceptOrder(code) {
   let claimed = true;
   try { claimed = await claimOrderSb(o, s.name); } catch (e) { claimed = true; }
   if (!claimed) {
-    toast("Too late — another rider already accepted this order.");
+    toast("Too late — another delivery man already accepted this order.");
     try { loadOrders(); } catch {}
     renderAll();
     return;
@@ -2275,7 +2358,7 @@ function lastCancelText(o) {
 }
 function confirmCall(code) {
   // Rider tapped "✅ কাস্টমার কনফার্ম করেছে" after calling the customer.
-  const s = session(); if (!s || s.role !== "rider") return toast("Login as a rider first.");
+  const s = session(); if (!s || s.role !== "rider") return toast("Login as a delivery man first.");
   const all = orders(); const o = findInList(all, code); if (!o) return;
   if (o.rider !== s.name) return toast("This order is not yours.");
   if (o.status !== "accepted") return toast("এই ধাপে আর কল-কনফার্ম লাগবে না।");
@@ -2290,7 +2373,7 @@ function askCancel(code) {
   openModal(`<div class="pop">
     <button class="pop-close" onclick="closeModal()" aria-label="Close">✕</button>
     <h2>❌ অর্ডার ক্যানসেল করুন — ${esc(o.code)}</h2>
-    <p class="muted">অর্ডারটি আবার অন্য রাইডারদের কাছে যাবে। আপনি এই অর্ডারটি আর নিতে পারবেন না।</p>
+    <p class="muted">অর্ডারটি আবার অন্য ডেলিভারি ম্যানদের কাছে যাবে। আপনি এই অর্ডারটি আর নিতে পারবেন না।</p>
     <label>ক্যানসেলের কারণ (আবশ্যক)</label>
     ${CANCEL_REASONS.map((r, i) => `<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="radio" name="cancelReason" value="${esc(r)}" style="width:auto" ${i === 0 ? "checked" : ""}> <span>${esc(r)}</span></label>`).join("")}
     <label>নোট — কোন পণ্যটি পাননি / বিস্তারিত লিখুন</label><input id="cancelNote" placeholder="যেমন: Radhuni Oil 1L দোকানে পাওয়া যায়নি">
@@ -2311,7 +2394,7 @@ function confirmCancel(code) {
   cancelOrder(code, reason, note);
 }
 function cancelOrder(code, reason, note) {
-  const s = session(); if (!s || s.role !== "rider") return toast("Login as a rider first.");
+  const s = session(); if (!s || s.role !== "rider") return toast("Login as a delivery man first.");
   const all = orders(); const o = findInList(all, code); if (!o) return;
   if (o.rider !== s.name) return toast("This order is not yours.");
   if (o.status === "delivered" || o.status === "placed") return toast("এই অর্ডারটি আর ক্যানসেল করা যাবে না।");
@@ -2331,7 +2414,7 @@ function cancelOrder(code, reason, note) {
   delete o.statusLog.picked_up; delete o.statusLog.on_the_way; delete o.statusLog.delivered;
   o.status = "placed";
   setOrders(all); syncOrderStatus(o); renderAll();
-  notify(o.code + " ক্যানসেল হয়েছে — নতুন রাইডার খুঁজছি…");
+  notify(o.code + " ক্যানসেল হয়েছে — নতুন ডেলিভারি ম্যান খুঁজছি…");
 }
 // ---------- Customer cancel (v28) ----------
 // Tamim (24 Nov ~12:40): the customer can cancel until the rider marks
@@ -2343,11 +2426,11 @@ function cancelOrder(code, reason, note) {
 function askCustomerCancel(code) {
   // v34: with duplicate codes, the modal must describe the CUSTOMER's own order.
   const o = findOrderFor(code, (session() || {}).phone); if (!o) return;
-  if (o.status !== "placed" && o.status !== "accepted") return toast("রাইডার পণ্য কিনে ফেলেছে — এখন আর ক্যানসেল করা যাবে না।");
+  if (o.status !== "placed" && o.status !== "accepted") return toast("ডেলিভারি ম্যান পণ্য কিনে ফেলেছে — এখন আর ক্যানসেল করা যাবে না।");
   openModal(`<div class="pop">
     <button class="pop-close" onclick="closeModal()" aria-label="Close">✕</button>
     <h2>❌ অর্ডার ক্যানসেল করবেন?</h2>
-    <p>অর্ডার <b>${esc(o.code)}</b> (${fmt(o.total)}) ক্যানসেল হয়ে যাবে। রাইডার এখনো পণ্য কেনেনি, তাই এখনো ক্যানসেল করা যাচ্ছে।</p>
+    <p>অর্ডার <b>${esc(o.code)}</b> (${fmt(o.total)}) ক্যানসেল হয়ে যাবে। ডেলিভারি ম্যান এখনো পণ্য কেনেনি, তাই এখনো ক্যানসেল করা যাচ্ছে।</p>
     <div style="display:flex;gap:8px;margin-top:12px"><button class="btn danger" onclick="cancelOrderByCustomer('${code}')">হ্যাঁ, ক্যানসেল করুন</button><button class="btn ghost" onclick="closeModal()">ফিরে যান</button></div>
   </div>`);
 }
@@ -2355,7 +2438,7 @@ function cancelOrderByCustomer(code) {
   const s = session(); if (!s) return;
   const all = orders(); const o = findInListFor(all, code, s.phone); if (!o) return;
   if (o.phone !== s.phone && o.customer !== s.name) return toast("এই অর্ডারটি আপনার নয়।");
-  if (o.status !== "placed" && o.status !== "accepted") return toast("রাইডার পণ্য কিনে ফেলেছে — এখন আর ক্যানসেল করা যাবে না।");
+  if (o.status !== "placed" && o.status !== "accepted") return toast("ডেলিভারি ম্যান পণ্য কিনে ফেলেছে — এখন আর ক্যানসেল করা যাবে না।");
   closeModal();
   const now = new Date().toISOString();
   o.status = "cancelled"; o.cancelledBy = "customer"; o.cancelledAt = now;
@@ -2366,7 +2449,7 @@ function cancelOrderByCustomer(code) {
 function setStatus(code, st) {
   // v7 guard: only the rider who accepted this order, and only the NEXT step —
   // a rider can never skip a step (e.g. delivered before on the way).
-  const s = session(); if (!s || s.role !== "rider") return toast("Login as a rider first.");
+  const s = session(); if (!s || s.role !== "rider") return toast("Login as a delivery man first.");
   const all = orders(); const o = findInList(all, code); if (!o) return;
   if (o.rider !== s.name) return toast("This order is not yours.");
   const expected = STATUS_FLOW[STATUS_FLOW.indexOf(o.status) + 1];
@@ -2407,21 +2490,28 @@ function adminOrderRow(o, showHistory) {
   const td = timerDisplay(o);
   let timing = "";
   if (o.status === "delivered") timing = td.lateMs <= 0 ? `<span class="pill ok">${bn(Math.round(td.totalMs / 60000))} মিনিটে ✓ সময়মতো</span>` : `<span class="pill bad">${bn(Math.round(td.lateMs / 60000))} মিনিট দেরি</span>`;
-  else if (o.status === "placed") timing = !ridersCovering(o.area).length ? `<span class="pill bad">⚠️ এই এলাকায় রাইডার নেই</span>` : `<span class="muted">রাইডার অপেক্ষায়</span>`;
+  else if (o.status === "placed") timing = !ridersCovering(o.area).length ? `<span class="pill bad">⚠️ এই এলাকায় ডেলিভারি ম্যান নেই</span>` : `<span class="muted">ডেলিভারি ম্যান অপেক্ষায়</span>`;
   else timing = `<span class="js-countdown" data-key="${esc(o.sbId || o.code)}">${td.big}</span><br><span class="muted">${td.sub}</span>`;
-  const hist = showHistory ? (o.cancelHistory || []).map(h => `<br><span class="muted">❌ ${esc(h.rider || "রাইডার")} • ${fmtTime(h.at)} • ${esc(h.reason)}${h.note ? " — " + esc(h.note) : ""}</span>`).join("") : "";
+  const hist = showHistory ? (o.cancelHistory || []).map(h => `<br><span class="muted">❌ ${esc(h.rider || "ডেলিভারি ম্যান")} • ${fmtTime(h.at)} • ${esc(h.reason)}${h.note ? " — " + esc(h.note) : ""}</span>`).join("") : "";
   return `<tr><td>${o.code}</td><td>${esc(o.customer)}<br><span class="muted">${esc(o.phone)}</span></td><td>${esc(o.area)}</td><td>${fmt(o.total)}</td><td><span class="pill ${o.status === "delivered" ? "ok" : "warn"}">${STATUS_BN[o.status] || o.status.replaceAll("_", " ")}</span>${o.status === "cancelled" && o.cancelledBy === "customer" ? `<br><span class="muted">❌ কাস্টমার ক্যানসেল করেছে</span>` : (o.cancelHistory || []).length ? `<br><span class="muted">❌ ক্যানসেল: ${esc(lastCancelText(o))} (${esc(o.cancelledBy || "")})</span>` : ""}${hist}</td><td>${timing}</td><td>${fmtTime(lastTs)}</td><td>${esc(o.rider || "—")}</td><td>${o.status === "delivered" ? waThanksBtn(o) : "—"}</td></tr>`;
 }
 function adminOrderSection(title, list, showHistory) {
-  return `<h3>${title} (${list.length})</h3>
-  ${list.length ? `<table><tr><th>Order</th><th>Customer</th><th>Area</th><th>Total</th><th>Status</th><th>সময় / দেরি</th><th>Updated</th><th>Rider</th><th>ধন্যবাদ</th></tr>${list.slice(0, 20).map(o => adminOrderRow(o, showHistory)).join("")}</table>` : "<p class='muted'>কোনো অর্ডার নেই।</p>"}`;
+  return `<h3 class="gm-panel-head">${title} (${list.length})</h3>
+  ${list.length ? `<table><tr><th>Order</th><th>Customer</th><th>Area</th><th>Total</th><th>Status</th><th>সময় / দেরি</th><th>Updated</th><th>Delivery Man</th><th>ধন্যবাদ</th></tr>${list.slice(0, 20).map(o => adminOrderRow(o, showHistory)).join("")}</table>` : "<p class='muted'>কোনো অর্ডার নেই।</p>"}`;
 }
 function loadCustomers() {
   if (LIVE && sb) {
     try {
-      sb.from("profiles").select("phone,name,address,area,role").eq("role", "customer")
+      // v39: also fetch created_at (registration date). Merge Supabase rows
+      // with any local-only customer accounts (dedup by phone) so no
+      // registered customer is missed.
+      sb.from("profiles").select("phone,name,address,area,role,created_at").eq("role", "customer")
         .then(({ data, error }) => {
-          adminCustomers = (!error && Array.isArray(data) && data.length) ? data : users().filter(u => u.role === "customer");
+          const remote = (!error && Array.isArray(data)) ? data : [];
+          const local = users().filter(u => u.role === "customer");
+          const seen = new Set(remote.map(r => normalisePhone(r.phone)));
+          remote.push(...local.filter(u => !seen.has(normalisePhone(u.phone))));
+          adminCustomers = remote;
           if (adminTab === "customers") renderCustomerList(custQuery);
         }).catch(() => { adminCustomers = users().filter(u => u.role === "customer"); if (adminTab === "customers") renderCustomerList(custQuery); });
       return;
@@ -2437,12 +2527,22 @@ function renderCustomerList(q) {
   // (toggle ON shows them again).
   const list = adminVisibleUsers(adminCustomers || users().filter(u => u.role === "customer"));
   const needle = custQuery.trim().toLowerCase();
-  const filtered = needle ? list.filter(c => (c.name || "").toLowerCase().includes(needle) || (c.phone || "").includes(needle)) : list;
+  const filtered = needle ? list.filter(c => (c.name || "").toLowerCase().includes(needle) || (c.phone || "").includes(needle) || (c.area || "").toLowerCase().includes(needle) || (c.address || "").toLowerCase().includes(needle)) : list;
+  // v39: newest registered first (rows without a date go last).
+  const sorted = filtered.slice().sort((a, b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return tb - ta;
+  });
   const all = orders();
-  el.innerHTML = filtered.length ? filtered.map(c => {
+  // v39: total count at a glance — how many customers have registered.
+  const countEl = $("#custCount"); if (countEl) countEl.textContent = `মোট কাস্টমার: ${bn(list.length)} জন${needle ? ` • খুঁজে পাওয়া গেছে: ${bn(filtered.length)} জন` : ""}`;
+  el.innerHTML = sorted.length ? sorted.map(c => {
     const mine = all.filter(o => o.phone === c.phone || o.customer === c.name);
     const spent = mine.reduce((a, o) => a + o.total, 0);
-    return `<div class="panel"><b>${esc(c.name || "—")}</b> • ${esc(c.phone || "—")}<br><span class="muted">${esc(c.address || c.area || "ঠিকানা দেওয়া হয়নি")}</span><br>অর্ডার: <b>${mine.length}</b> • মোট খরচ: <b>${fmt(spent)}</b></div>`;
+    const last = mine.length ? mine.map(o => o.created).sort().pop() : null;
+    const reg = c.created_at ? fmtDateBn(c.created_at) : null;
+    return `<div class="panel"><b>${esc(c.name || "—")}</b> • ${esc(c.phone || "—")}<br><span class="muted">${esc(c.address || c.area || "ঠিকানা দেওয়া হয়নি")}</span><br>অর্ডার: <b>${mine.length}</b> • মোট খরচ: <b>${fmt(spent)}</b>${last ? ` • শেষ অর্ডার: <b>${fmtDateBn(last)}</b>` : ""}${reg ? `<br><span class="muted">রেজিস্টার: ${reg}</span>` : ""}</div>`;
   }).join("") : "<p>কোনো কাস্টমার পাওয়া যায়নি।</p>";
 }
 function renderAdmin() {
@@ -2454,9 +2554,10 @@ function renderAdmin() {
     <button class="btn ghost" onclick="setAdminTab('orders')">📦 অর্ডার</button>
     <button class="btn" onclick="setAdminTab('customers')">👥 কাস্টমার</button>
     ${adminDemoToggleHTML()}</div>
-    ${adminShowDemo() ? `<p class="muted" style="color:#b45309">⚠️ ডেমো/টেস্ট ডেটা দেখানো হচ্ছে — ডেমো কাস্টমার/রাইডারের তথ্যও এই প্যানেলে দেখাচ্ছে।</p>` : `<p class="muted">ডেমো/টেস্ট অ্যাকাউন্ট এই প্যানেলে দেখানো হয় না।</p>`}
-    <h3>কাস্টমার — নাম বা ফোন নম্বর দিয়ে খুঁজুন</h3>
-    <input id="custSearch" placeholder="নাম বা ফোন নম্বর লিখুন…" value="${esc(custQuery)}" oninput="renderCustomerList(this.value)">
+    ${adminShowDemo() ? `<p class="muted" style="color:#b45309">⚠️ ডেমো/টেস্ট ডেটা দেখানো হচ্ছে — ডেমো কাস্টমার/ডেলিভারি ম্যানের তথ্যও এই প্যানেলে দেখাচ্ছে।</p>` : `<p class="muted">ডেমো/টেস্ট অ্যাকাউন্ট এই প্যানেলে দেখানো হয় না।</p>`}
+    <h3 class="gm-panel-head">কাস্টমার — নাম বা ফোন নম্বর দিয়ে খুঁজুন</h3>
+    <p id="custCount" class="muted"></p>
+    <input id="custSearch" placeholder="নাম, ফোন নম্বর বা এলাকা লিখুন…" value="${esc(custQuery)}" oninput="renderCustomerList(this.value)">
     <div id="custList"></div>`;
     if (!adminCustomers) loadCustomers(); else renderCustomerList(custQuery);
     return;
@@ -2484,17 +2585,17 @@ function renderAdmin() {
     <button class="btn" onclick="setAdminTab('orders')">📦 অর্ডার</button>
     <button class="btn ghost" onclick="setAdminTab('customers')">👥 কাস্টমার</button>
     ${adminDemoToggleHTML()}</div>
-  ${adminShowDemo() ? `<p class="muted" style="color:#b45309">⚠️ ডেমো/টেস্ট ডেটা দেখানো হচ্ছে — ডেমো কাস্টমার/রাইডারের অর্ডারও এই প্যানেলে দেখাচ্ছে।</p>` : `<p class="muted">ডেমো/টেস্ট অ্যাকাউন্টের অর্ডার এই প্যানেলে দেখানো হয় না।</p>`}
+  ${adminShowDemo() ? `<p class="muted" style="color:#b45309">⚠️ ডেমো/টেস্ট ডেটা দেখানো হচ্ছে — ডেমো কাস্টমার/ডেলিভারি ম্যানের অর্ডারও এই প্যানেলে দেখাচ্ছে।</p>` : `<p class="muted">ডেমো/টেস্ট অ্যাকাউন্টের অর্ডার এই প্যানেলে দেখানো হয় না।</p>`}
   <div class="statgrid">
     <div class="stat"><b>${todays.length}</b>Orders today</div>
     <div class="stat"><b>${todays.filter(o => o.status === "delivered").length}</b>Delivered today</div>
     <div class="stat"><b>${todays.filter(o => o.status === "placed" || o.status === "accepted").length}</b>Pending</div>
     <div class="stat"><b>${fmt(sales)}</b>Product sales today (delivered)</div>
     <div class="stat"><b>${fmt(fees)}</b>Delivery charges today (delivered)</div>
-    <div class="stat"><b>${fmt(riderDue(todays.filter(o => o.status === "delivered")).service)}</b>সার্ভিস চার্জ আজ</div><div class="stat"><b>${fmt(riderDue(todays.filter(o => o.status === "delivered")).total)}</b>রাইডারদের মোট জমা (সার্ভিস + ১০%)</div>
+    <div class="stat"><b>${fmt(riderDue(todays.filter(o => o.status === "delivered")).service)}</b>সার্ভিস চার্জ আজ</div><div class="stat"><b>${fmt(riderDue(todays.filter(o => o.status === "delivered")).total)}</b>ডেলিভারি ম্যানদের মোট জমা (সার্ভিস + ১০%)</div>
     <div class="stat"><b>${all.length}</b>Total orders (all time)</div>
   </div>
-  <h3>📊 আজকের হিসাব — শুধু ডেলিভারি হওয়া অর্ডার</h3>
+  <h3 class="gm-panel-head">📊 আজকের হিসাব — শুধু ডেলিভারি হওয়া অর্ডার</h3>
   <p class="muted">শুধু ডেলিভারি হওয়া অর্ডার গণনা করা হয় — প্লেসড বা ক্যানসেল অর্ডার এতে ধরা হয় না। অর্ডার ডেলিভারি হলেই এই হিসাব সাথে সাথে আপডেট হয়।</p>
   <div class="statgrid" id="adminTodaySummary">
     <div class="stat"><b>${dUnits}</b>মোট পণ্য বিক্রি (পিস)</div>
@@ -2504,18 +2605,18 @@ function renderAdmin() {
     <div class="stat"><b>${fmt(dDue.service)}</b>সার্ভিস চার্জ (৳৫ × পণ্য)</div>
     <div class="stat"><b>${fmt(dDeposit)}</b>আজ মালিকের কাছে মোট জমা</div>
   </div>
-  <h3>Live Orders ${all.filter(o => o.status === "placed").length ? `<span class="badge">${all.filter(o => o.status === "placed").length} new</span>` : ""}</h3>
-  <table><tr><th>Order</th><th>Customer</th><th>Area</th><th>Total</th><th>Status</th><th>সময় / দেরি</th><th>Updated</th><th>Rider</th><th>ধন্যবাদ</th></tr>
+  <h3 class="gm-panel-head">Live Orders ${all.filter(o => o.status === "placed").length ? `<span class="badge">${all.filter(o => o.status === "placed").length} new</span>` : ""}</h3>
+  <table><tr><th>Order</th><th>Customer</th><th>Area</th><th>Total</th><th>Status</th><th>সময় / দেরি</th><th>Updated</th><th>Delivery Man</th><th>ধন্যবাদ</th></tr>
   ${all.length ? all.slice(0, 30).map(o => adminOrderRow(o, false)).join("") : `<tr><td colspan="9">এখনো কোনো অর্ডার আসেনি — কাস্টমার অর্ডার করলেই এখানে দেখাবে।</td></tr>`}</table>
   ${adminOrderSection("✅ ডেলিভারি হয়েছে", all.filter(o => o.status === "delivered"), false)}
   ${adminOrderSection("❌ ক্যানসেল হয়েছে (সব)", all.filter(o => o.status === "cancelled"), false)}
   ${adminOrderSection("❌ কাস্টমার ক্যানসেল করেছে", all.filter(o => o.status === "cancelled" && o.cancelledBy === "customer"), false)}
-  ${adminOrderSection("❌ রাইডার ক্যানসেল করেছে (অর্ডার আবার পুলে গেছে)", all.filter(o => (o.cancelHistory || []).length), true)}
+  ${adminOrderSection("❌ ডেলিভারি ম্যান ক্যানসেল করেছে (অর্ডার আবার পুলে গেছে)", all.filter(o => (o.cancelHistory || []).length), true)}
   ${adminReviewsHTML()}
-  <h3>Rider Verification</h3>
+  <h3 class="gm-panel-head">Delivery Man Verification</h3>
   ${adminVerificationHTML(verifs, riders)}
-  <h3>Daily Settlement — Tonight's Checklist (${t})</h3>
-  <p class="muted">Approve = rider stays active tomorrow. Not Approved = rider goes OFF/banned until you re-activate after WhatsApp payment.</p>
+  <h3 class="gm-panel-head">Daily Settlement — Tonight's Checklist (${t})</h3>
+  <p class="muted">Approve = delivery man stays active tomorrow. Not Approved = delivery man goes OFF/banned until you re-activate after WhatsApp payment.</p>
   <button class="btn small" onclick="buildSettlement()">Generate Tonight's Checklist</button>
   ${riders.map(r => {
     // v35: demo-customer orders never count in a rider's admin numbers,
@@ -2529,9 +2630,9 @@ function renderAdmin() {
     <button class="btn small danger" onclick="settleRider('${esc(r.phone)}','not_approved')">Not Approved</button>
     <button class="btn small gold" onclick="reactivateRider('${esc(r.phone)}')">Re-activate / ON</button></div>`;
   }).join("")}
-  <h3>Riders</h3>
+  <h3 class="gm-panel-head">Delivery Men</h3>
   <table><tr><th>Name</th><th>Phone</th><th>এলাকা</th><th>Verified</th><th>Online</th><th>Status</th></tr>${adminVisibleUsers(mergeAdminRiders(riders)).map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.phone)}</td><td>${esc((r.areas || []).join(", ") || "—")}</td><td>${r.verified ? "Yes" : r.vstatus}</td><td>${r.online ? "Online" : "Offline"}</td><td>${r.banned ? "OFF" : "Active"}</td></tr>`).join("")}</table>
-  <h3>Settings</h3><p>Owner bKash (riders send 10% here): <b>${BKASH}</b> • Delivery fee: ${fmt(DELIVERY_FEE)} (৫ কেজি পর্যন্ত) + ৳৫ প্রতি অতিরিক্ত কেজি • Areas: ${window.BAZARKORI_AREAS.join(", ")}</p>
+  <h3 class="gm-panel-head">Settings</h3><p>Owner bKash (delivery men send 10% here): <b>${BKASH}</b> • Delivery fee: ${fmt(DELIVERY_FEE)} (৫ কেজি পর্যন্ত) + ৳৫ প্রতি অতিরিক্ত কেজি • Areas: ${window.BAZARKORI_AREAS.join(", ")}</p>
   <p class="muted">Admin account is one-time only. No one can register a second admin from this app.</p>`;
 }
 function reviewVerification(i, status) {
@@ -2545,7 +2646,7 @@ function reviewVerification(i, status) {
     syncRiderStatusToSupabase(v.phone, status);
     loadAdminVerifs(true);
   }
-  renderAll(); toast("Rider " + status + ": " + v.nidName);
+  renderAll(); toast("Delivery Man " + status + ": " + v.nidName);
 }
 // ---------- Admin verifications from Supabase (v32) ----------
 // A rider registers + submits NID on THEIR phone; the owner reviews on
@@ -2617,7 +2718,7 @@ function reviewVerificationSb(id, phone, status) {
         if (r) { r.verified = status === "verified"; r.vstatus = status; if (status === "verified") { const v = (adminVerifsSb || []).find(x => String(x.id) === String(id)); if (v) r.name = v.nid_name; } if (status !== "verified") r.online = false; setUsers(all); }
         const vs = ls("bazar_verifications", []); const lv = vs.find(x => x.phone === phone); if (lv) { lv.status = status; save("bazar_verifications", vs); }
         adminVerifsSb = null; loadAdminVerifs(true); renderAll();
-        toast("Rider " + status + ": " + phone);
+        toast("Delivery Man " + status + ": " + phone);
       }).catch(() => toast("আপডেট হয়নি — আবার চেষ্টা করুন।"));
   } catch (e) { toast("আপডেট হয়নি — আবার চেষ্টা করুন।"); }
 }
@@ -2744,8 +2845,31 @@ function jsTween(el, slot, dur, onUpdate, onDone) {
   raf = requestAnimationFrame(step);
   slots[slot] = () => { dead = true; cancelAnimationFrame(raf); delete slots[slot]; };
 }
+// v40: display label for a role value — the raw role ("rider") is never
+// shown to the user; the header whoami line and the rider-page note use this.
+function roleLabel(r) { return r === "rider" ? "ডেলিভারি ম্যান" : r === "customer" ? "কাস্টমার" : r === "admin" ? "অ্যাডমিন" : r; }
+// ---------- Hero typewriter (v40) ----------
+// Types the hero headline #heroTitle character by character (~45ms/char,
+// Bangla-safe: Array.from iterates code points, not UTF-16 units).
+// Reduced-motion users see the FULL text instantly (nothing is cleared).
+// Runs once per page load; a no-op when #heroTitle does not exist. The
+// existing hero fade / Ken Burns code in animatePage() is untouched.
+let _heroTyped = false;
+function typeHeroTitle() {
+  if (_heroTyped) return;
+  const el = document.getElementById("heroTitle");
+  if (!el) return;
+  const full = el.textContent;
+  if (!full) return;
+  _heroTyped = true;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const chars = Array.from(full);
+  el.textContent = "";
+  chars.forEach((ch, i) => setTimeout(() => { el.textContent += ch; }, 45 * (i + 1)));
+}
 let _animPageDone = false, _animHeroDone = false, _revealObs = null;
 function animatePage() {
+  typeHeroTitle(); // v40: typewriter headline, once per page load
   // Page fade-in once per page load.
   if (!_animPageDone) {
     _animPageDone = true;
@@ -2851,7 +2975,8 @@ function flyToCart(id, imgSrc) {
 }
 function renderAll() {
   const s = session();
-  const who = $("#whoami"); if (who) who.textContent = s ? `Logged in: ${s.name} (${s.role})` : "";
+  // v40: the header shows the role in Bangla, never the raw role value.
+  const who = $("#whoami"); if (who) who.textContent = s ? `Logged in: ${s.name} (${roleLabel(s.role)})` : "";
   const lb = $("#logoutBtn"); if (lb) lb.classList.toggle("hidden", !s);
   // Header buttons by role (v10): logged out → Login/Register only;
   // customer → no Admin button; admin (owner) → Admin button.
@@ -2862,7 +2987,7 @@ function renderAll() {
   if (adminBtn) adminBtn.classList.toggle("hidden", !s || s.role !== "admin");
   // v15: only render what exists on THIS page — each page has its own job.
   renderCats();
-  if (PAGE === "index.html") { renderCatTiles(); renderDeals(); renderReviews(); }
+  if (PAGE === "index.html") { renderCatTiles(); renderDeals(); renderWeekly(); renderReviews(); }
   else if (PAGE === "categories.html") { renderProducts(); }
   else if (PAGE === "deals.html") { renderDeals(); }
   else if (PAGE === "product.html") { renderProductDetail(); }

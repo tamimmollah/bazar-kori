@@ -6,10 +6,10 @@
 <title>লগইন / রেজিস্টার — বাজার করি</title>
 <meta name="description" content="বাজার করি-তে লগইন করুন বা নতুন কাস্টমার অ্যাকাউন্ট বানান। রেজিস্ট্রেশনে ইমেইল ভেরিফিকেশন লাগবে — কোড যাবে আপনার ইমেইলে।">
 <link rel="icon" href="logo.png">
-<link rel="stylesheet" href="styles.css?v=38">
+<link rel="stylesheet" href="styles.css?v=40">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=38"></script>
-<script src="products.js?v=38"></script>
+<script src="supabase-config.js?v=40"></script>
+<script src="products.js?v=40"></script>
 </head>
 <body>
 <div id="shellHeader"></div>
@@ -28,11 +28,11 @@
       <button class="btn gold auth-primary" onclick="loginFromPage()">লগইন</button>
       <div class="auth-divider"><span>অথবা</span></div>
       <p class="auth-alt">অ্যাকাউন্ট নেই? পাশে রেজিস্টার করুন।</p>
-      <div class="rider-cta">🛵 রাইডার হতে চান? <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a></div>
+      <div class="rider-cta">🛵 ডেলিভারি ম্যান হতে চান? <a href="rider.html">ডেলিভারি ম্যান হিসেবে রেজিস্টার করুন</a></div>
     </div>
     <div class="panel login-card" id="regPanel">
       <h2>রেজিস্টার — কাস্টমার</h2>
-      <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। রাইডার হতে চাইলে <a href="rider.html">রাইডার রেজিস্ট্রেশন</a> করুন।</p>
+      <p class="muted">শুধু কাস্টমার রেজিস্ট্রেশন। ডেলিভারি ম্যান হতে চাইলে <a href="rider.html">ডেলিভারি ম্যান রেজিস্ট্রেশন</a> করুন।</p>
       <div id="regForm">
       <label>নাম</label><input id="rpName" placeholder="আপনার নাম">
       <label>ফোন নম্বর</label><input id="rpPhone" placeholder="01XXXXXXXXX">
@@ -43,7 +43,7 @@
       <div id="rpTerms"></div>
       <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="rpAgree" style="width:auto;margin-top:4px"> <span>হ্যাঁ, আমি উপরের সব শর্তে রাজি</span></label>
       <button class="btn gold auth-primary" onclick="registerFromPage()">রেজিস্টার করুন</button>
-      <div class="rider-cta">🛵 রাইডার হতে চান? <a href="rider.html">রাইডার হিসেবে রেজিস্টার করুন</a></div>
+      <div class="rider-cta">🛵 ডেলিভারি ম্যান হতে চান? <a href="rider.html">ডেলিভারি ম্যান হিসেবে রেজিস্টার করুন</a></div>
       </div>
       <div id="regOtp" class="hidden"></div>
     </div>
@@ -51,6 +51,6 @@
   <div class="panel" id="loginInfo" style="max-width:900px;margin:16px auto 0"></div>
 </main>
 <div id="shellFooter"></div>
-<script src="app.js?v=38"></script>
+<script src="app.js?v=40"></script>
 </body>
 </html>
