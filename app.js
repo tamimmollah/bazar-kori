@@ -361,10 +361,14 @@ function goTo(id) {
   const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth" });
 }
 let activeCat = "All";
-// ---------- Bilingual search (v15.1) ----------
+// ---------- Bilingual search (v15.2) ----------
 // Bangla word → English synonyms, so typing বাংলায় finds the English-named
-// products (e.g. "তেল" → oil, "চাল" → rice). Matching is case-insensitive
-// and substring-based; every query word must match (directly or via a synonym).
+// products (e.g. "তেল" → oil, "চাল" → rice). Matching is case-insensitive.
+// WORD-BOUNDARY RULE (v15.2 fix): an English term only matches a whole word
+// (or the START of a word) in the product name/category — never a mid-word
+// substring. "oil" used to match "t**oil**et" and "br**oil**er", so "তেল"
+// returned toilet tissue and broiler chicken. Bangla terms still match by
+// substring, because Bangla words have no spaces inside them.
 const BN_EN = {
   "তেল": ["oil"], "চাল": ["rice"], "ভাত": ["rice"], "চিনি": ["sugar"],
   "লবণ": ["salt"], "লবন": ["salt"], "ডাল": ["lentil", "dal", "pulse"],
@@ -412,18 +416,48 @@ const CAT_BN = {
   "Party Store": "পার্টি", "Stationery": "স্টেশনারি",
   "Fruit & Vegetables": "ফল সবজি", "Meat & Fish": "মাছ মাংস"
 };
+// Split a product's searchable text into words (English + Bangla).
+function hayWords(p) {
+  const hay = (p.name + " " + p.unit + " " + p.category + " " + (CAT_BN[p.category] || "")).toLowerCase();
+  return { hay, words: hay.split(/[^a-z0-9\u0980-\u09ff]+/i).filter(Boolean) };
+}
+// Does an English term match on word boundaries? Single word: equals the
+// word or starts it ("oil" matches "oil", "oils"; never "toilet"/"broiler").
+// Multi-word ("mustard oil", "ice cream"): the words must appear consecutively.
+function wordMatch(words, term) {
+  const ts = String(term).toLowerCase().split(/[^a-z0-9\u0980-\u09ff]+/).filter(Boolean);
+  if (!ts.length) return false;
+  if (ts.length === 1) return words.some(w => w === ts[0] || w.startsWith(ts[0]));
+  for (let i = 0; i + ts.length <= words.length; i++) {
+    if (ts.every((t, j) => words[i + j] === t || words[i + j].startsWith(t))) return true;
+  }
+  return false;
+}
+// One query term against one product: Bangla → substring; English →
+// word-boundary match (see above).
+function termMatches(p, term) {
+  const { hay, words } = hayWords(p);
+  if (/[\u0980-\u09ff]/.test(term)) return hay.includes(term.toLowerCase());
+  return wordMatch(words, term);
+}
 function productMatches(p, q) {
   q = (q || "").toLowerCase().trim();
   if (!q) return true;
-  const hay = (p.name + " " + p.unit + " " + p.category + " " + (CAT_BN[p.category] || "")).toLowerCase();
-  if (hay.includes(q)) return true; // direct substring, English or Bangla
-  // Multi-word Bangla phrases first, e.g. "কোল্ড ড্রিংকস" → soft drink.
-  for (const k of Object.keys(BN_EN)) {
-    if (k.indexOf(" ") !== -1 && q.indexOf(k) !== -1 && BN_EN[k].some(s => hay.includes(s))) return true;
+  const { hay } = hayWords(p);
+  // Bangla query: direct substring first, then Bangla→English synonyms
+  // (matched on word boundaries, so "তেল"→"oil" can't hit "toilet").
+  if (/[\u0980-\u09ff]/.test(q)) {
+    if (hay.includes(q)) return true;
+    // Multi-word Bangla phrases first, e.g. "কোল্ড ড্রিংকস" → soft drink.
+    for (const k of Object.keys(BN_EN)) {
+      if (k.indexOf(" ") !== -1 && q.indexOf(k) !== -1 && BN_EN[k].some(s => termMatches(p, s))) return true;
+    }
+    // Every word must match directly or through its Bangla→English synonyms.
+    return q.split(/\s+/).filter(Boolean).every(t =>
+      hay.includes(t) || (BN_EN[t] || []).some(s => termMatches(p, s)));
   }
-  // Every word must match directly or through its Bangla→English synonyms.
-  return q.split(/\s+/).filter(Boolean).every(t =>
-    hay.includes(t) || (BN_EN[t] || []).some(s => hay.includes(s)));
+  // English query: every word must match on word boundaries.
+  return q.split(/\s+/).filter(Boolean).every(t => termMatches(p, t));
 }
 function renderCats() {
   const cats = ["All", ...window.BAZARKORI_CATEGORIES];
@@ -447,8 +481,16 @@ function renderCatTiles() {
 }
 function setCat(c) { activeCat = c; renderProducts(); }
 function is18(p) { return ["Tong & Smokestore", "Smokeless & Vape", "Sexual Wellness"].includes(p.category); }
+let _prodRetry = 0;
 function renderProducts() {
   const grid = $("#grid"); if (!grid) return;
+  // If the catalog data isn't here yet (e.g. products.js still loading),
+  // retry a few times instead of painting "No products found" on an empty grid.
+  if (!window.BAZARKORI_PRODUCTS || !window.BAZARKORI_PRODUCTS.length) {
+    if (_prodRetry < 5) { _prodRetry++; setTimeout(renderProducts, 300); }
+    return;
+  }
+  _prodRetry = 0;
   const searchEl = $("#search");
   const q = ((searchEl ? searchEl.value : qp("q")) || "").toLowerCase();
   let list = window.BAZARKORI_PRODUCTS.filter(p => (activeCat === "All" || p.category === activeCat) && productMatches(p, q));
@@ -1027,25 +1069,43 @@ function renderAll() {
   const newCount = orders().filter(o => o.status === "placed").length;
   const b = $("#orderBadge"); if (b) { b.textContent = newCount; b.classList.toggle("hidden", !newCount); }
 }
-// ---------- Init (v15.1) ----------
+// ---------- Init (v15.2) ----------
 // BUG (v15, found live): categories.html grid was EMPTY on first load —
 // products only appeared after clicking a chip and then "All".
-// Root cause: the first render ran ONLY as the last step of one long init
-// chain (seed → mountShell → initSupabase → initPageParams → renderAll), so
-// if ANY earlier step threw — e.g. a stale cached v14 app.js, whose
-// renderAll() touched #whoami / #view-admin / #orderBadge WITHOUT guards and
-// died before renderProducts() ever ran — the grid stayed empty, while the
-// hoisted setCat() still worked from chip clicks (exactly the live symptom).
-// Fix: (1) run each init step in its own try/catch so one failure can never
-// kill the render; (2) re-render on DOMContentLoaded as a safety net, forcing
-// the "All" filter on categories.html; renderAll/renderProducts are
-// idempotent, so the extra render is harmless.
+// v15.1 ROOT CAUSE (found by testing the live files in real headless Chrome:
+// the v15.1 code itself renders 232 cards on first load): the v15.1 fix only
+// version-busted app.js on categories.html ("app.js?v=15.1"). A browser that
+// had already cached the v15 categories.html (which referenced plain
+// "app.js") and the v15 app.js kept running the OLD unguarded boot chain
+// "seed(); mountShell(); initSupabase(); initPageParams(); renderAll();"
+// where ANY one step throwing killed renderAll() — and the old code had no
+// DOMContentLoaded handler and no retry, so the grid stayed empty forever
+// (the throw also happened before the file's setInterval lines, so even the
+// 8s re-render never got registered). Clicking a chip called the hoisted
+// setCat() → renderProducts() directly, which is why clicks still worked.
+// v15.2 fix: (1) EVERY page now loads EVERY local asset with ?v=15.2, so a
+// stale cached file can never be served again — the new HTML references
+// versioned URLs that cannot collide with old cache entries; (2) each init
+// step runs in its own try/catch (v15.1); (3) DOMContentLoaded re-render
+// (v15.1) PLUS a window-load re-render PLUS 300ms/1000ms retries that
+// render the grid if it is still empty (below). renderAll/renderProducts
+// are idempotent, so the extra renders are harmless.
+function renderCategoriesIfEmpty() {
+  if (PAGE !== "categories.html") return;
+  const grid = $("#grid");
+  if (grid && grid.querySelectorAll(".card").length === 0) {
+    try { activeCat = qp("cat") || activeCat || "All"; renderCats(); renderProducts(); } catch (e) { console.warn("categories retry failed", e); }
+  }
+}
 function initApp() {
   try { seed(); } catch (e) { console.warn("seed failed", e); }
   try { mountShell(); } catch (e) { console.warn("mountShell failed", e); }
   try { initSupabase(); } catch (e) { console.warn("initSupabase failed", e); }
   try { initPageParams(); } catch (e) { console.warn("initPageParams failed", e); }
   try { renderAll(); } catch (e) { console.warn("renderAll failed", e); }
+  // Belt-and-braces: if the grid is STILL empty shortly after load, render it.
+  setTimeout(renderCategoriesIfEmpty, 300);
+  setTimeout(renderCategoriesIfEmpty, 1000);
 }
 initApp();
 if (typeof document !== "undefined" && document.addEventListener) {
@@ -1059,6 +1119,9 @@ if (typeof document !== "undefined" && document.addEventListener) {
   } else if (PAGE === "categories.html") {
     try { renderProducts(); } catch (e) { console.warn("categories re-render failed", e); }
   }
+  window.addEventListener("load", () => {
+    try { if (PAGE === "categories.html") renderCategoriesIfEmpty(); else renderAll(); } catch (e) { console.warn("load re-render failed", e); }
+  });
 }
 // Poll every 8s so an order placed in another tab/device appears (Supabase realtime does this live when configured).
 setInterval(() => { renderAll(); }, 8000);
