@@ -395,7 +395,19 @@ main{max-width:1200px}
    looks broken, so it now slides always. Reduced-motion users are still
    respected by the rule below. */
 @keyframes topbar-slide{from{transform:translateX(0)}to{transform:translateX(-100%)}}
-@media(prefers-reduced-motion:reduce){.topbar-track{animation:none}}
+/* v26: NO reduced-motion exception for the ticker — and NOTE that removing
+   it alone is NOT the fix. Root cause of the "strip looks still" report
+   (Tamim, 24 Nov, phone AND PC): when the browser reports
+   prefers-reduced-motion: reduce, Chromium creates NO CSS animation at
+   all — getAnimations() is empty and the strip measures 0px in 3s even
+   though computed animation-name still says "topbar-slide" (proven live:
+   reduced-motion emulated → 0px; no-preference → ~360px/3s). The v25
+   hover-pause theory was WRONG (v25 has no hover rule and still froze
+   live). The real fix is the JS fallback in app.js startTopbarTicker(),
+   which drives the slide with requestAnimationFrame when reduced-motion
+   matches (JS transforms are not suppressed). This rule is removed as
+   well so nothing in the stylesheet fights the fallback. Other
+   animations below keep their reduced-motion rules. */
 
 /* ---- Header: logo row + full-width search row below it ---- */
 header{flex-direction:column;align-items:stretch;gap:10px;padding:10px 14px}

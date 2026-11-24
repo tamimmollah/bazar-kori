@@ -137,13 +137,12 @@ function initSupabase() {
 function shellHTML() {
   const cats = ["All", ...window.BAZARKORI_CATEGORIES];
   const active = (p) => PAGE === p ? " active" : "";
-  // v25 ticker: the 3-message set is repeated 3× inside EACH track (9 spans).
-  // ROOT CAUSE (v24): one set per track made a 776px track at phone width —
-  // 35px/s, barely noticeable — AND the :hover pause rule (now removed from
-  // styles.css) froze it whenever the cursor rested on the strip (PC) or a
-  // tap left a stuck :hover (phone). 3× repeats ≈ 2,330px/track at 390px
-  // (≈106px/s) and ≈2,700px at desktop — unmistakable motion, same 22s
-  // loop, both tracks identical so the loop stays seamless.
+  // v25 ticker: the 3-message set is repeated 3× inside EACH track (9 spans),
+  // so one track is ~2,330px at phone width and ~2,650px at desktop —
+  // unmistakable motion at the 22s loop speed, both tracks identical so
+  // the loop stays seamless. (v26: the v24 "too slow / hover-pause" theory
+  // was WRONG — the real freeze cause is reduced-motion, see
+  // startTopbarTicker() below and the styles.css note.)
   const topMsgs = `<span>📍 Demra Thana + আশেপাশের এলাকা</span><span>🚚 ফ্ল্যাট ৳৩০ ডেলিভারি • 💵 COD</span><span>📞 <a href="tel:01865861015">01865-861015</a> • ⏰ খোলা: রাত ১২টা পর্যন্ত</span>`;
   const topTrack = topMsgs + topMsgs + topMsgs;
   return `
@@ -237,6 +236,56 @@ function mountShell() {
   // Fill the customer terms on login.html's register form (if present).
   const rt = document.getElementById("rpTerms");
   if (rt) rt.innerHTML = CUSTOMER_TERMS_HTML;
+  startTopbarTicker(); // v26: JS fallback drive when reduced-motion is on
+}
+
+// ---------- Top-strip ticker, JS fallback (v26) ----------
+// The strip normally slides via CSS (topbar-slide, 22s loop). But when the
+// browser reports prefers-reduced-motion: reduce, Chromium creates NO CSS
+// animation at all — getAnimations() is empty, computed transform stays
+// "none", 0px movement — even though computed animation-name still says
+// "topbar-slide". PROVEN live: with reduced-motion emulated the v25 strip
+// measured 0px in 3s; with no-preference it moved ~360px in 3s. That is the
+// real root cause of Tamim's "strip looks still" on his PC (Windows
+// Animation effects OFF) and on the live-check browsers. The v25
+// hover-pause theory was WRONG (v25 has no hover rule and still froze).
+// FIX: when reduced-motion matches, kill the CSS animation on the tracks
+// and drive the same slide with requestAnimationFrame — JS-set transforms
+// are NOT suppressed by reduced-motion. Same speed as CSS (one full track
+// width per 22s), same seamless wrap (both tracks identical). When the
+// setting flips back, the CSS loop resumes. Tamim requires this strip to
+// always slide, so the ticker deliberately ignores reduced-motion.
+let topbarRAF = null;
+function startTopbarTicker() {
+  try {
+    const tracks = document.querySelectorAll(".topbar-track");
+    if (!tracks.length || tracks.length < 2) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const stopJS = () => {
+      if (topbarRAF) cancelAnimationFrame(topbarRAF);
+      topbarRAF = null;
+      tracks.forEach(t => { t.style.animation = ""; t.style.transform = ""; });
+    };
+    const startJS = () => {
+      tracks.forEach(t => { t.style.animation = "none"; });
+      let w = tracks[0].getBoundingClientRect().width || 2000;
+      let x = 0, last = performance.now();
+      const step = now => {
+        const dt = Math.min(100, now - last); last = now;
+        w = tracks[0].getBoundingClientRect().width || w;
+        x -= (w / 22000) * dt; // full track width per 22s, like the CSS loop
+        if (x <= -w) x += w;
+        tracks[0].style.transform = "translateX(" + x + "px)";
+        tracks[1].style.transform = "translateX(" + x + "px)";
+        topbarRAF = requestAnimationFrame(step);
+      };
+      topbarRAF = requestAnimationFrame(step);
+    };
+    const apply = () => { stopJS(); if (mq.matches) startJS(); };
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+    else if (mq.addListener) mq.addListener(apply);
+    apply();
+  } catch (e) { console.warn("topbar ticker failed", e); }
 }
 // Category tile / footer link → categories page, pre-filtered.
 function goCat(c) { location.href = "categories.html?cat=" + encodeURIComponent(c || "All"); }
@@ -245,29 +294,42 @@ function goSearch() { const v = ($("#hdrSearch") && $("#hdrSearch").value) || ""
 
 // ---------- Seed data ----------
 function seed() {
-  // Migration (v19): DELETE the demo orders seeded by v1–v18. A fresh account
-  // must show NOTHING until that person actually places an order. Only
-  // orders matching ALL THREE parts of the seed's own fingerprint are
-  // deleted — a real order can never match all three at once:
+  // Migration (v19, fixed v26): DELETE the demo orders seeded by v1–v18. A
+  // fresh account must show NOTHING until that person actually places an
+  // order. Only orders matching ALL THREE parts of the seed's own
+  // fingerprint are deleted:
   //   code LN-1001…LN-1006 AND customer "Demo Customer 1/2"
   //   AND phone 01710000002/01710000003.
-  // Runs on every load (before the bazar_seeded early-return below) so
-  // browsers that already hold the fake orders get cleaned on first v19 load.
+  // BUG (v26 root cause): this ran on EVERY load, and createOrder() assigns
+  // codes from max(existing)+1 starting at LN-1001 — so a REAL order placed
+  // by Demo Customer 1/2 also matches all three parts and was deleted on
+  // the very next page load (e.g. opening My Orders). That is why test
+  // orders LN-1002 (v24: ৳1,145, and v25: Coke 1L ৳130) vanished.
+  // FIX: run this cleanup ONCE per browser, ever (flag
+  // bazar_v19_demo_cleanup_done). That is safe because the only orders it
+  // can ever match are the original v1–v18 seeded fakes: on v18 the six
+  // fake codes 1001–1006 were already taken, so any REAL demo order placed
+  // on v18 got LN-1007+, and on v19+ a real order is only ever created
+  // AFTER this one-time cleanup has already run and set the flag. A real
+  // order placed by ANY account (demo or not) is therefore never deleted.
   try {
-    const DEMO_CODES = ["LN-1001", "LN-1002", "LN-1003", "LN-1004", "LN-1005", "LN-1006"];
-    const DEMO_CUSTOMERS = ["Demo Customer 1", "Demo Customer 2"];
-    const DEMO_PHONES = ["01710000002", "01710000003"];
-    const cur = orders();
-    const kept = cur.filter(o => !(DEMO_CODES.includes(o.code) && DEMO_CUSTOMERS.includes(o.customer) && DEMO_PHONES.includes(o.phone)));
-    if (kept.length !== cur.length) setOrders(kept);
-    // Demo-derived rows the seed also wrote: fake payout (TrxID "DEMO…")
-    // and fake NID verification (NID 1234567890 for demo rider Rahim).
-    const ps = ls("bazar_payouts", []);
-    const keptPs = ps.filter(p => !(typeof p.trxid === "string" && p.trxid.indexOf("DEMO") === 0));
-    if (keptPs.length !== ps.length) save("bazar_payouts", keptPs);
-    const vs = ls("bazar_verifications", []);
-    const keptVs = vs.filter(v => !(v.phone === "01710000006" && v.nid === "1234567890"));
-    if (keptVs.length !== vs.length) save("bazar_verifications", keptVs);
+    if (!ls("bazar_v19_demo_cleanup_done", false)) {
+      const DEMO_CODES = ["LN-1001", "LN-1002", "LN-1003", "LN-1004", "LN-1005", "LN-1006"];
+      const DEMO_CUSTOMERS = ["Demo Customer 1", "Demo Customer 2"];
+      const DEMO_PHONES = ["01710000002", "01710000003"];
+      const cur = orders();
+      const kept = cur.filter(o => !(DEMO_CODES.includes(o.code) && DEMO_CUSTOMERS.includes(o.customer) && DEMO_PHONES.includes(o.phone)));
+      if (kept.length !== cur.length) setOrders(kept);
+      // Demo-derived rows the seed also wrote: fake payout (TrxID "DEMO…")
+      // and fake NID verification (NID 1234567890 for demo rider Rahim).
+      const ps = ls("bazar_payouts", []);
+      const keptPs = ps.filter(p => !(typeof p.trxid === "string" && p.trxid.indexOf("DEMO") === 0));
+      if (keptPs.length !== ps.length) save("bazar_payouts", keptPs);
+      const vs = ls("bazar_verifications", []);
+      const keptVs = vs.filter(v => !(v.phone === "01710000006" && v.nid === "1234567890"));
+      if (keptVs.length !== vs.length) save("bazar_verifications", keptVs);
+      save("bazar_v19_demo_cleanup_done", true);
+    }
   } catch {}
   // Migration (v11 rename): copy old "lagbe_*" localStorage keys to "bazar_*"
   // once, so existing accounts/orders/sessions survive the rename.
